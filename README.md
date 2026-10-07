@@ -109,6 +109,18 @@ node test/installed-check.mjs <profile>/node_modules/dsh-magical-lowcode-project
 node test/installed-check.mjs --from-profile <profileDir>
 ```
 
+Browser check for the client half (the only check that proves `apply()` really ran in a browser):
+
+```bash
+node test/browser-check.mjs "http://127.0.0.1:<port>/?token=<token>"
+```
+
+It drives a headless Chromium against a live UI and asserts that `__DSH_BOOT__` carries this
+plugin's boot row, that the sidebar shows the button this plugin registers
+(`title="低代码工程模式"`), and that no runtime error mentions the plugin.
+⚠️ It needs an environment that can launch Chromium; in a sandbox that refuses to start a
+browser it stops at "cannot reach the debugging port".
+
 One-off real-install verification:
 
 ```bash

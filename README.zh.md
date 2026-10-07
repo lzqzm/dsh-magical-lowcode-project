@@ -109,6 +109,16 @@ node test/installed-check.mjs <profile>/node_modules/dsh-magical-lowcode-project
 node test/installed-check.mjs --from-profile <profileDir>
 ```
 
+客户端半边的**浏览器真机检查**（唯一能证明 `apply()` 真在浏览器里跑成功的检查）：
+
+```bash
+node test/browser-check.mjs "http://127.0.0.1:<port>/?token=<token>"
+```
+
+它用 headless Chromium 打开真实界面，断言 `__DSH_BOOT__` 里有本插件的 boot 行、
+侧边栏出现本插件注册的按钮（`title="低代码工程模式"`），且没有涉及本插件的运行时异常。
+⚠️ 它需要能启动 Chromium 的环境；在拒绝启动浏览器的沙箱里会停在「连不上调试端口」。
+
 一次性的真机验证流程：
 
 ```bash

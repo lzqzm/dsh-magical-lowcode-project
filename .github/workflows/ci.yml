@@ -1,0 +1,27 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  self-check:
+    name: 静态自检 (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # engines.node 声明的是 ^22.19.0 || >=24.0.0，这里各取一条线验证
+        node: ["22", "24"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      # 刻意不跑 npm install：这个包没有任何构建步骤，自检本身零依赖。
+      # 核心包是 peerDependencies，在裸检出里本来就解析不到，verify.mjs 会把
+      # 「ERR_MODULE_NOT_FOUND」当作「语法通过」而不是失败。
+      - name: 自检
+        run: npm test

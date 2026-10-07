@@ -95,12 +95,21 @@ Core packages (`@deepseek-ai/dsh-agent-presets`, `@deepseek-ai/dsh-typert-protoc
 There is no build step: both halves are authored artifacts, so edit `lib/index.js` / `lib/client.js` directly.
 
 ```bash
-npm test         # static self-check: manifest / compatibility literals / both halves' export contracts /
-                 # slot registration discipline / specifier allow-list / 12-RPC declare-define-reach
-                 # three-way consistency / locales
+# npm test chains two checks (zero dependencies; CI and prepublishOnly run the same command)
+npm test
+#  1) test/verify.mjs            static self-check: manifest / compatibility literals / both halves'
+#                                export contracts / slot registration discipline / specifier allow-list /
+#                                12-RPC declare-define-reach consistency / locales
+#  2) test/client-stub-check.mjs client logic stub check: really EXECUTES the bundle's factory and
+#                                apply() with a stub require + stub ctx, asserting the $mount
+#                                contribution and both slot registrations
 ```
 
-`prepublishOnly` runs the same self-check, so a publish cannot skip it.
+The stub check closes a gap: `verify.mjs` only reads bytes, and the browser check cannot run where a
+browser cannot launch — while the stub check needs neither a browser nor a network, and also covers
+`apply`'s degradation branches (does it exit cleanly when `remote` / `slots` are missing).
+
+`prepublishOnly` runs the same two steps, so a publish cannot skip them.
 
 Check the installed copy (does it still import once inside a profile?):
 

@@ -71,6 +71,10 @@
     "preset"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lzqzm/dsh-magical-lowcode-project.git"
+  },
   "engines": {
     "node": "^22.19.0 || >=24.0.0",
     "dsh": ">=0.1.0-rc.5 <0.2.0-0"

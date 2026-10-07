@@ -8,11 +8,15 @@ on:
 
 jobs:
   self-check:
-    name: 静态自检 (node ${{ matrix.node }})
-    runs-on: ubuntu-latest
+    name: 静态自检 (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        # ubuntu 是 GitHub 默认、也是插件市场自己的 CI 环境；windows 是我实际验证过
+        # 裸检出跑通的环境（开发机是 Windows，本机没有 WSL，所以 Linux 路径没能在
+        # 本地实跑）。两个都跑，覆盖面最广，首次跑也能立刻暴露平台差异。
+        os: [ubuntu-latest, windows-latest]
         # engines.node 声明的是 ^22.19.0 || >=24.0.0，这里各取一条线验证
         node: ["22", "24"]
     steps:

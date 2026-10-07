@@ -1,0 +1,12 @@
+# npm pack 产物
+*.tgz
+
+# 开发用依赖（peer 依赖的 junction 与本地补装的依赖，一律不入库）
+node_modules/
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log

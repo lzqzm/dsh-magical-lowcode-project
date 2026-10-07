@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Low-code Project Mode (dsh-magical-lowcode-project)",
+    "description": "Low-code project mode: browse a low-code project tree inside the workspace, inspect page/api push status, run source-*.js project scripts, assemble a page preview sandbox, lint before pushing, and import/export Agent preset packages (.dshpreset)."
+  }
+}

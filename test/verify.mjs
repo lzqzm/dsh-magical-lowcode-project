@@ -107,10 +107,39 @@ if (pkg !== undefined) {
 	}
 	if (passes.length > 0) pass("exports 关键子路径齐全且目标存在");
 
-	/* files 白名单里的静态条目必须存在（locale 通配除外） */
+	/*
+	 * files 白名单的**内容完整性**。为什么不能只查「条目存在」：市场走 `github:owner/repo`
+	 * 装的是「git 追踪的整仓」，而不是 `npm pack` 的输出 —— 白名单里的文件若没提交、或被
+	 * .gitignore 挡掉、或整个目录变空，npm 侧一点看不出来，用户那边却会装到一个缺文件的包。
+	 */
+	let filesChecked = 0;
 	for (const entry of pkg.files ?? []) {
 		if (entry.includes("*")) continue;
-		if (!existsSync(join(root, entry))) fail(`files 白名单里的 ${entry} 不存在`);
+		const abs = join(root, entry);
+		if (!existsSync(abs)) {
+			fail(`files 白名单里的 ${entry} 不存在`);
+			continue;
+		}
+		filesChecked += 1;
+		if (statSync(abs).isDirectory() && readdirSync(abs).length === 0) {
+			fail(`files 白名单里的目录 ${entry} 是空的 —— 内容可能被 .gitignore 挡掉了`);
+		}
+	}
+	if (filesChecked > 0) pass(`files 白名单 ${filesChecked} 项存在、目录非空（市场装整仓时不会缺文件）`);
+
+	/*
+	 * 安装期脚本必须为空。市场把插件交给 pnpm 的 `github:` 源，pnpm 会**在用户机器上**执行
+	 * 仓库的 prepare / install 系脚本；本插件没有构建步骤，一旦有人顺手加了 build 管线，
+	 * dshmarket 就会报 git-prepare-failed（常见诱因是仓库自带 lockfile 与镜像 registry 冲突）。
+	 */
+	const installHooks = ["preinstall", "install", "postinstall", "prepare", "prepublish", "prepublishOnly"];
+	const dangerousHooks = installHooks.filter(
+		(hook) => hook !== "prepublishOnly" && typeof (pkg.scripts ?? {})[hook] === "string",
+	);
+	if (dangerousHooks.length > 0) {
+		fail(`package.json 不能有 ${dangerousHooks.join(" / ")} 脚本：市场以 github: 形式安装时会在用户机器上执行它（dshmarket 报 git-prepare-failed）`);
+	} else {
+		pass("安装期没有会被 pnpm 在用户机器上执行的 prepare/install 脚本");
 	}
 
 	/* 核心包只能走 peerDependencies，不能打成自带副本 */

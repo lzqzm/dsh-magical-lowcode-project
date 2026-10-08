@@ -375,8 +375,94 @@ else {
 			const unreachable = hostMethods.filter((method) => !called.includes(method));
 			if (unreachable.length > 0) fail(`以下 RPC 在 host 侧注册、在客户端 descriptor 里声明，但面板从未调用（死功能）：${unreachable.join(", ")}`);
 			else pass(`12 个 RPC 全部在面板里可达`);
+
+			/*
+			 * 调用点的实参个数必须与 host 形参个数一致。
+			 * 在 JS + JSON 协议下少传/多传都不会抛错：少传的参数静默变成 undefined，
+			 * 多传的被丢掉 —— 面板会「看起来能用」但功能不对，属于最难查的一类问题。
+			 */
+			const aritySkew = [];
+			for (const match of clientSource.matchAll(/call\(\s*["']([A-Za-z0-9_]+)["']/g)) {
+				const method = match[1];
+				const expected = hostArity(hostSource, method);
+				const actual = countTopLevelArgs(clientSource, match.index + match[0].length);
+				if (expected === null) aritySkew.push(`${method}（host 侧找不到 \`${method}(…)\` 方法定义）`);
+				else if (actual === null) aritySkew.push(`${method}（调用点括号不配对，无法数出实参）`);
+				else if (actual !== expected) aritySkew.push(`${method}：面板传 ${actual} 个实参，host 收 ${expected} 个形参`);
+			}
+			if (aritySkew.length > 0) fail(`RPC 调用点的实参个数与 host 形参不符：${aritySkew.join("；")}`);
+			else pass(`${new Set([...clientSource.matchAll(/call\(\s*["']([A-Za-z0-9_]+)["']/g)].map((m) => m[1])).size} 个 RPC 调用点的实参个数与 host 形参逐一对齐`);
 		}
 	}
+}
+
+/** host 侧 `<method>(a, b, c) {` 的形参个数；找不到定义返回 null。 */
+function hostArity(source, method) {
+	const match = source.match(new RegExp(`^\\s*(?:async\\s+)?${method}\\s*\\(([^)]*)\\)\\s*\\{`, "m"));
+	if (match === null) return null;
+	const params = match[1].trim();
+	return params === "" ? 0 : params.split(",").length;
+}
+
+/**
+ * 从 `call("<method>"` 之后开始，数出这次调用的顶层实参个数（方法名本身不算）。
+ * 规则：顶层逗号数就是实参个数，但**末尾那个尾随逗号不算**
+ * （`call("m", a, b,)` 是 2 个实参，不是 3 个 —— 这是合法的 JS，面板里就写了尾随逗号）。
+ * 必须跨行、跳过字符串与注释里的逗号、正确配对嵌套括号，所以不能简单 split。
+ */
+function countTopLevelArgs(source, from) {
+	let depth = 0;
+	let commas = 0;
+	let pending = false; // 最后一个顶层逗号之后是否又出现了有意义的内容
+	let quote = null;
+	let index = from;
+	while (index < source.length) {
+		const char = source[index];
+		if (quote !== null) {
+			if (char === "\\") index += 2;
+			else {
+				if (char === quote) quote = null;
+				index += 1;
+			}
+			continue;
+		}
+		if (char === '"' || char === "'" || char === "`") {
+			if (depth === 0) pending = true;
+			quote = char;
+			index += 1;
+			continue;
+		}
+		if (char === "/" && source[index + 1] === "/") {
+			const newline = source.indexOf("\n", index);
+			index = newline === -1 ? source.length : newline + 1;
+			continue;
+		}
+		if (char === "/" && source[index + 1] === "*") {
+			const end = source.indexOf("*/", index);
+			index = end === -1 ? source.length : end + 2;
+			continue;
+		}
+		if (char === "(" || char === "[" || char === "{") {
+			if (depth === 0) pending = true;
+			depth += 1;
+			index += 1;
+			continue;
+		}
+		if (char === ")" || char === "]" || char === "}") {
+			if (depth === 0 && char === ")") return commas > 0 && !pending ? commas - 1 : commas;
+			depth -= 1;
+			index += 1;
+			continue;
+		}
+		if (depth === 0) {
+			if (char === ",") {
+				commas += 1;
+				pending = false;
+			} else if (!/\s/.test(char)) pending = true;
+		}
+		index += 1;
+	}
+	return null;
 }
 
 /* ------------------------------------------------------------- 5. locale */

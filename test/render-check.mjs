@@ -1,0 +1,343 @@
+#!/usr/bin/env node
+/**
+ * dsh-magical-lowcode-project 客户端半边 · 渲染层桩检。
+ *
+ * 为什么需要它：`client-stub-check.mjs` 证明了「apply() 注册了什么」，但注册的
+ * 组件函数**一次都没有被调用过**——也就是说面板到底能不能渲染出东西、五个页签
+ * 是不是都画得出来、页签切换之外的入口结构对不对，之前无人验证。真机浏览器检查
+ * （`browser-check.mjs`）在拒绝启动浏览器进程的机器上跑不了，于是中间这一层只能
+ * 靠桩 React 顶。
+ *
+ * 做法：把桩 `react` 的 `useState` 做成「本次渲染的第 1 次调用可被覆盖」。由于
+ * `Panel()` 一定是渲染树里第一个被调用的组件、它的第 1 个 hook 就是 `useState(active)`，
+ * 这样就可以把 active 依次设成五个页签的 key，把**每个页签**都真正渲染一遍，
+ * 而不需要真实的 react-dom。
+ *
+ * 这个脚本零第三方依赖（React 是桩），所以可以直接挂进 `npm test` 与 CI。
+ *
+ * 用法：node test/render-check.mjs
+ */
+import { readFileSync } from "node:fs";
+import { join, dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createContext, runInContext } from "node:vm";
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const failures = [];
+const passes = [];
+const infos = [];
+const fail = (m) => failures.push(m);
+const pass = (m) => passes.push(m);
+const info = (m) => infos.push(m);
+const read = (rel) => readFileSync(join(root, rel), "utf8");
+
+/* ------------------------------------------------- 1. 以经典 script 执行 bundle */
+
+const clientSource = read("lib/client.js");
+const captured = {};
+const store = new Map();
+const sandbox = {
+	window: {
+		__ModuleLoader__: {
+			load(registration) {
+				captured.registration = registration;
+			},
+		},
+		localStorage: {
+			getItem: (key) => (store.has(key) ? store.get(key) : null),
+			setItem: (key, value) => store.set(key, String(value)),
+		},
+	},
+};
+createContext(sandbox);
+try {
+	runInContext(clientSource, sandbox, { filename: "lib/client.js" });
+} catch (error) {
+	fail(`以经典 script 方式执行 lib/client.js 抛错：${error?.message ?? error}`);
+}
+const registration = captured.registration;
+if (registration === undefined) fail("lib/client.js 没有调用 window.__ModuleLoader__.load(...)");
+
+/* --------------------------------------------------------- 2. 桩 react（可覆盖） */
+
+/** 本次渲染是否要把第 1 次 useState 的初始值替换掉（用来拨动 Panel 的 active）。 */
+let activeOverride;
+let useStateCallIndex = 0;
+const reactStub = {
+	createElement: (type, props, ...children) => ({ __element: true, type, props: props ?? {}, children }),
+	useState: (initial) => {
+		useStateCallIndex += 1;
+		const value =
+			useStateCallIndex === 1 && activeOverride !== undefined
+				? activeOverride
+				: typeof initial === "function"
+					? initial()
+					: initial;
+		return [value, () => {}];
+	},
+	useCallback: (fn) => fn,
+	useRef: (initial) => ({ current: initial === undefined ? null : initial }),
+	Fragment: Symbol("Fragment"),
+};
+const primitivesStub = { Button: "UI.Button", Input: "UI.Input", Modal: "UI.Modal", Pill: "UI.Pill", Tag: "UI.Tag" };
+const requireStub = (specifier) => {
+	if (specifier === "react") return reactStub;
+	if (specifier === "@deepseek-ai/dsh-client-ui-primitives") return primitivesStub;
+	throw new Error(`桩 require 收到预期外的说明符：${specifier}`);
+};
+
+/* --------------------------------------------- 3. apply 一遍，截下两个注册组件 */
+
+function makeCtx() {
+	const registers = [];
+	const slots = {
+		inject(key, callback) {
+			const disposer = callback();
+			return typeof disposer === "function" ? disposer : () => {};
+		},
+		register(contribution, component) {
+			registers.push({ contribution, component });
+			return () => {};
+		},
+	};
+	const ctx = {
+		remote: {
+			async $mount() {
+				return () => {};
+			},
+		},
+		get(name) {
+			if (name === "slots") return slots;
+			if (name === "remote.desktopProject") return { __rpc: true };
+			return undefined;
+		},
+		effect(execute) {
+			const disposer = execute();
+			return typeof disposer === "function" ? disposer : () => {};
+		},
+	};
+	return { ctx, registers };
+}
+
+let exported;
+let components = new Map();
+if (registration?.factory !== undefined) {
+	try {
+		exported = registration.factory(requireStub);
+	} catch (error) {
+		fail(`factory(require) 执行抛错：${error?.message ?? error}`);
+	}
+	if (exported !== undefined && exported !== null) {
+		const probe = makeCtx();
+		try {
+			await exported.apply(probe.ctx);
+			components = new Map(probe.registers.map((r) => [r.contribution?.name, r.component]));
+		} catch (error) {
+			fail(`apply(ctx) 执行抛错：${error?.message ?? error}`);
+		}
+	}
+}
+const SettingsSection = components.get("settings.section");
+const SidebarAction = components.get("sidebar.footer.action");
+if (typeof SettingsSection !== "function") fail("没能从 settings.section 截获组件函数");
+if (typeof SidebarAction !== "function") fail("没能从 sidebar.footer.action 截获组件函数");
+
+/* ------------------------------------------------------------------ 4. 渲染器 */
+
+/**
+ * 递归求值元素树：函数组件就地调用，宿主元素（含桩基元的字符串类型）保留结构。
+ * 桩 useState 只在「本次渲染的第 1 次调用」上可能被覆盖，后续调用都返回真初始值。
+ */
+function render(element, depth = 0) {
+	if (depth > 400) throw new Error("渲染树超过 400 层，疑似无限递归");
+	if (element === null || element === undefined || element === true || element === false) return null;
+	const kind = typeof element;
+	if (kind === "string" || kind === "number") return { kind: "text", text: String(element) };
+	if (Array.isArray(element)) {
+		const children = [];
+		for (const child of element) {
+			const rendered = render(child, depth + 1);
+			if (rendered !== null) children.push(rendered);
+		}
+		return { kind: "list", children };
+	}
+	if (kind === "object" && element.__element === true) {
+		const { type, props, children } = element;
+		if (typeof type === "function") {
+			const name = type.name === "" ? "<anonymous>" : type.name;
+			return { kind: "component", name, props, inner: render(type(props), depth + 1) };
+		}
+		const kids = [];
+		for (const child of children ?? []) {
+			const rendered = render(child, depth + 1);
+			if (rendered !== null) kids.push(rendered);
+		}
+		return { kind: "host", name: String(type), props, children: kids };
+	}
+	return { kind: "unknown", value: String(element) };
+}
+
+/** 深度优先收集整棵树里的节点。 */
+function walk(node, visit) {
+	if (node === null || node === undefined) return;
+	visit(node);
+	if (node.kind === "list") for (const child of node.children) walk(child, visit);
+	if (node.kind === "component") walk(node.inner, visit);
+	if (node.kind === "host") for (const child of node.children) walk(child, visit);
+}
+
+/** 取一个子树的纯文本（用来断言页签标签之类）。 */
+function textOf(node) {
+	let out = "";
+	walk(node, (n) => {
+		if (n.kind === "text") out += n.text;
+	});
+	return out;
+}
+
+/** 拨动 active 后渲染一次设置页入口。 */
+function renderSettings(tabKey) {
+	useStateCallIndex = 0;
+	activeOverride = tabKey;
+	try {
+		return render(reactStub.createElement(SettingsSection, {}));
+	} finally {
+		activeOverride = undefined;
+	}
+}
+
+/** 不拨动 active，渲染侧边栏入口。 */
+function renderSidebar() {
+	useStateCallIndex = 0;
+	activeOverride = undefined;
+	return render(reactStub.createElement(SidebarAction, {}));
+}
+
+/* ------------------------------------------------------ 5. 设置页：五个页签 */
+
+const TABS = [
+	{ key: "tree", label: "项目树" },
+	{ key: "push", label: "推送状态" },
+	{ key: "preview", label: "预览与体检" },
+	{ key: "script", label: "工程脚本" },
+	{ key: "preset", label: "预设包" },
+];
+
+if (typeof SettingsSection === "function") {
+	let firstTree;
+	for (const tab of TABS) {
+		let tree;
+		try {
+			tree = renderSettings(tab.key);
+			if (tab.key === "tree") firstTree = tree;
+		} catch (error) {
+			fail(`active="${tab.key}" 时渲染设置页抛错：${error?.message ?? error}`);
+			continue;
+		}
+		if (tree === null) {
+			fail(`active="${tab.key}" 时渲染结果是 null`);
+			continue;
+		}
+		const pills = [];
+		const hosts = new Set();
+		walk(tree, (n) => {
+			if (n.kind === "host") {
+				hosts.add(n.name);
+				if (n.name === primitivesStub.Pill) pills.push(n);
+			}
+		});
+		if (pills.length !== TABS.length) {
+			fail(`active="${tab.key}" 时页签按钮应有 ${TABS.length} 个，实际 ${pills.length} 个`);
+			continue;
+		}
+		const labels = pills.map((p) => textOf(p));
+		if (labels.join("|") !== TABS.map((t) => t.label).join("|")) {
+			fail(`页签标签顺序不对：实际 [${labels.join(", ")}]`);
+			continue;
+		}
+		pass(`设置页 active="${tab.key}" 渲染成功（${hosts.size} 种宿主元素，页签 ${labels.join("/")}）`);
+
+		/* 各页签至少要渲染出自己的内容，而不是空白。 */
+		const tabNodes = [];
+		walk(tree, (n) => {
+			if (n.kind === "component" && n.name !== "SettingsSection" && n.name !== "Panel") tabNodes.push(n.name);
+		});
+		if (tabNodes.length === 0) fail(`active="${tab.key}" 时没有任何页签组件被渲染`);
+		else if (tab.key === "tree") {
+			/* Panel 首屏应当渲染出 TreeTab 自己。 */
+			if (!tabNodes.includes("TreeTab")) fail(`默认页签应当渲染 TreeTab，实际渲染了 [${tabNodes.join(", ")}]`);
+		}
+	}
+
+	/* 首屏默认落在「项目树」：不拨动 active 时应当与 active="tree" 一致。 */
+	if (firstTree !== null) {
+		let natural;
+		try {
+			useStateCallIndex = 0;
+			activeOverride = undefined;
+			natural = render(reactStub.createElement(SettingsSection, {}));
+		} catch (error) {
+			fail(`不拨动 active 时渲染抛错：${error?.message ?? error}`);
+		}
+		if (natural !== undefined && natural !== null) {
+			const names = [];
+			walk(natural, (n) => {
+				if (n.kind === "component") names.push(n.name);
+			});
+			if (!names.includes("TreeTab")) fail(`默认渲染没有出现 TreeTab（实际 [${names.join(", ")}]）`);
+			else pass("不拨动 active 时默认渲染 TreeTab（首屏与 active=\"tree\" 一致）");
+		}
+	}
+}
+
+/* ------------------------------------------------------ 6. 侧边栏入口结构 */
+
+if (typeof SidebarAction === "function") {
+	let tree;
+	try {
+		tree = renderSidebar();
+	} catch (error) {
+		fail(`渲染侧边栏入口抛错：${error?.message ?? error}`);
+	}
+	if (tree !== undefined && tree !== null) {
+		const hosts = [];
+		const comps = [];
+		walk(tree, (n) => {
+			if (n.kind === "host") hosts.push(n);
+			if (n.kind === "component") comps.push(n.name);
+		});
+		const button = hosts.find((n) => n.name === primitivesStub.Button);
+		const modal = hosts.find((n) => n.name === primitivesStub.Modal);
+		if (button === undefined) fail("侧边栏入口没有渲染出 Button");
+		else {
+			if (button.props.title !== "低代码工程模式") fail(`侧边栏按钮 title 应为「低代码工程模式」，实际 ${JSON.stringify(button.props.title)}`);
+			else pass(`侧边栏入口渲染出 Button（title="${button.props.title}"）`);
+			if (typeof button.props.onClick !== "function") fail("侧边栏按钮的 onClick 不是函数");
+			else pass("侧边栏按钮的 onClick 是可调用函数");
+		}
+		if (modal === undefined) fail("侧边栏入口没有渲染出 Modal");
+		else {
+			if (modal.props.open !== false) fail(`Modal 初始 open 应为 false，实际 ${JSON.stringify(modal.props.open)}`);
+			else pass("侧边栏 Modal 初始 open=false（点击后才展开）");
+			if (!comps.includes("Panel")) fail("Modal 里没有渲染 Panel");
+			else pass("侧边栏 Modal 内嵌 Panel（同一面板的浮层副本）");
+		}
+	}
+}
+
+/* ------------------------------------------------------------------- 输出 */
+
+const line = "-".repeat(72);
+console.log(line);
+console.log("dsh-magical-lowcode-project 客户端半边 · 渲染层桩检");
+console.log(line);
+for (const item of passes) console.log(`  ok    ${item}`);
+for (const item of infos) console.log(`  info  ${item}`);
+for (const item of failures) console.log(`  FAIL  ${item}`);
+console.log(line);
+console.log(`通过 ${passes.length} · 失败 ${failures.length}`);
+if (failures.length > 0) {
+	console.log("\n渲染层桩检未通过。");
+	process.exit(1);
+}
+console.log("\n渲染层桩检通过。");

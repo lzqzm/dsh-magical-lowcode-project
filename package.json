@@ -92,9 +92,10 @@
     "@deepseek-ai/dsh-typert-protocol": "^0.1.5-0"
   },
   "scripts": {
-    "test": "node test/verify.mjs && node test/client-stub-check.mjs",
+    "test": "node test/verify.mjs && node test/client-stub-check.mjs && node test/render-check.mjs",
     "test:smoke": "node test/smoke.mjs",
     "test:client": "node test/client-stub-check.mjs",
-    "prepublishOnly": "node test/verify.mjs && node test/client-stub-check.mjs"
+    "test:render": "node test/render-check.mjs",
+    "prepublishOnly": "node test/verify.mjs && node test/client-stub-check.mjs && node test/render-check.mjs"
   }
 }

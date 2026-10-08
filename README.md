@@ -95,7 +95,7 @@ Core packages (`@deepseek-ai/dsh-agent-presets`, `@deepseek-ai/dsh-typert-protoc
 There is no build step: both halves are authored artifacts, so edit `lib/index.js` / `lib/client.js` directly.
 
 ```bash
-# npm test chains two checks (zero dependencies; CI and prepublishOnly run the same command)
+# npm test chains three checks (zero dependencies; CI and prepublishOnly run the same command)
 npm test
 #  1) test/verify.mjs            static self-check: manifest / compatibility literals / both halves'
 #                                export contracts / slot registration discipline / specifier allow-list /
@@ -103,13 +103,17 @@ npm test
 #  2) test/client-stub-check.mjs client logic stub check: really EXECUTES the bundle's factory and
 #                                apply() with a stub require + stub ctx, asserting the $mount
 #                                contribution and both slot registrations
+#  3) test/render-check.mjs      client render stub check: really RENDERS both slot components with
+#                                a stub React, flipping each of the five tabs, asserting tab label
+#                                order and the sidebar entry structure
 ```
 
-The stub check closes a gap: `verify.mjs` only reads bytes, and the browser check cannot run where a
-browser cannot launch — while the stub check needs neither a browser nor a network, and also covers
-`apply`'s degradation branches (does it exit cleanly when `remote` / `slots` are missing).
+The two stub checks close a gap: `verify.mjs` only reads bytes, and the browser check cannot run where
+a browser cannot launch — while the stub checks need neither a browser nor a network. The logic layer
+also covers `apply`'s degradation branches (does it exit cleanly when `remote` / `slots` are missing),
+and the render layer proves all five tabs actually paint.
 
-`prepublishOnly` runs the same two steps, so a publish cannot skip them.
+`prepublishOnly` runs the same three steps, so a publish cannot skip them.
 
 Check the installed copy (does it still import once inside a profile?):
 

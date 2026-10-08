@@ -96,18 +96,21 @@ dsh plugin --profile web add dsh-magical-lowcode-project
 没有构建步骤：host 半边与 client 半边都是手写产物，直接改 `lib/index.js` / `lib/client.js` 即可。
 
 ```bash
-# npm test 串两个检查（零依赖，CI 与 prepublishOnly 跑的是同一条命令）
+# npm test 串三个检查（零依赖，CI 与 prepublishOnly 跑的是同一条命令）
 npm test
 #  1) test/verify.mjs           静态自检：manifest / 兼容性字面量 / 两个半边的导出契约 /
 #                               slot 注册姿势 / 说明符白名单 / 12 个 RPC 的声明-定义-可达一致性 / locale
 #  2) test/client-stub-check.mjs 客户端逻辑层桩检：用桩 require + 桩 ctx **真的执行**
 #                               factory 与 apply，断言 $mount 的 contribution 与两个 slot 的注册
+#  3) test/render-check.mjs     客户端渲染层桩检：用桩 React **真的渲染**两个 slot 组件，
+#                               逐个拨动五个页签的 active，断言页签标签顺序与侧边栏入口结构
 ```
 
-桩检补的是空档：`verify.mjs` 只看字节，浏览器检查在拒绝启动浏览器的环境里跑不了，
-而桩检既不需要浏览器也不需要网络，还能覆盖 `apply` 的降级分支（`remote` / `slots` 缺失时是否优雅退出）。
+两个桩检补的是空档：`verify.mjs` 只看字节，浏览器检查在拒绝启动浏览器的环境里跑不了，
+而桩检既不需要浏览器也不需要网络 —— 逻辑层还能覆盖 `apply` 的降级分支（`remote` / `slots`
+缺失时是否优雅退出），渲染层则证明五个页签都真的画得出来。
 
-`prepublishOnly` 跑同样这两步，所以发布前必然过一遍。
+`prepublishOnly` 跑同样这三步，所以发布前必然过一遍。
 
 已安装副本的解析自检（验证「装进 profile 之后还能不能 import」）：
 

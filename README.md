@@ -101,8 +101,10 @@ npm test
 #                                export contracts / slot registration discipline / specifier allow-list /
 #                                12-RPC declare-define-reach consistency / locales
 #  2) test/client-stub-check.mjs client logic stub check: really EXECUTES the bundle's factory and
-#                                apply() with a stub require + stub ctx, asserting the $mount
-#                                contribution and both slot registrations
+#                                apply() with a stub require + stub ctx, asserting every RPC goes
+#                                through the same-origin fetch envelope (POST /api/desktopProject/<method>,
+#                                12 methods cross-checked verbatim and in order against the host)
+#                                and both slot registrations
 #  3) test/render-check.mjs      client render stub check: really RENDERS both slot components with
 #                                a stub React, flipping each of the five tabs, asserting tab label
 #                                order and the sidebar entry structure

@@ -101,7 +101,9 @@ npm test
 #  1) test/verify.mjs           静态自检：manifest / 兼容性字面量 / 两个半边的导出契约 /
 #                               slot 注册姿势 / 说明符白名单 / 12 个 RPC 的声明-定义-可达一致性 / locale
 #  2) test/client-stub-check.mjs 客户端逻辑层桩检：用桩 require + 桩 ctx **真的执行**
-#                               factory 与 apply，断言 $mount 的 contribution 与两个 slot 的注册
+#                               factory 与 apply，断言每次 RPC 都走同源 fetch 信封
+#                               （POST /api/desktopProject/<method>，12 个方法与 host 逐字含序比对），
+#                               以及两个 slot 的注册姿势
 #  3) test/render-check.mjs     客户端渲染层桩检：用桩 React **真的渲染**两个 slot 组件，
 #                               逐个拨动五个页签的 active，断言页签标签顺序与侧边栏入口结构
 ```

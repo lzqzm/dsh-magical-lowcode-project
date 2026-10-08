@@ -284,6 +284,114 @@ try {
 	if (sectionProbe.value === true) pass("页面文本里已经能看到「低代码工程模式」（设置入口已渲染）");
 	else info("设置区入口未渲染（正常：settings.section 要打开设置面板才挂载）");
 
+	/*
+	 * 面板交互：点开侧边栏入口 → 五个页签逐个拨动 → 让一次真实 RPC 走完 fetch 信封。
+	 * 这一段才是「面板真的能用」的证据：前面几条只能证明 slot 注册成功。
+	 */
+	if (markerFound) {
+		// 1) 装两个钩子：记录 fetch 的 URL 与状态码；把 confirm 固定为 true
+		//    （「重置记录」前有 window.confirm，headless 下会挡住点击）。
+		await cdp.evaluate(`(() => {
+			if (globalThis.__dshMcpHook === true) return true;
+			globalThis.__dshMcpHook = true;
+			globalThis.__dshMcpRpc = [];
+			const original = globalThis.fetch;
+			globalThis.fetch = function (...args) {
+				const url = String(args[0]);
+				const promise = original.apply(this, args);
+				promise.then(
+					(response) => {
+						let body = null;
+						try {
+							body = response.clone().json();
+						} catch (error) {
+							body = null;
+						}
+						if (body !== null && typeof body.then === "function") {
+							body.then(
+								(parsed) => globalThis.__dshMcpRpc.push({ url, status: response.status, ok: parsed?.result?.ok ?? parsed?.ok ?? null }),
+								() => globalThis.__dshMcpRpc.push({ url, status: response.status, ok: null }),
+							);
+						} else {
+							globalThis.__dshMcpRpc.push({ url, status: response.status, ok: null });
+						}
+					},
+					() => globalThis.__dshMcpRpc.push({ url, status: 0, ok: null }),
+				);
+				return promise;
+			};
+			globalThis.confirm = function () { return true; };
+			return true;
+		})()`);
+
+		// 2) 点开侧边栏入口，面板应当挂成一个 Modal。
+		const opened = await cdp.evaluate(`(() => {
+			const button = document.querySelector(${JSON.stringify(markerSelector)});
+			if (button === null) return false;
+			button.click();
+			return true;
+		})()`);
+		if (opened.value !== true) fail("找到了侧边栏按钮却点不动它");
+		await sleep(1200);
+
+		const tabLabels = ["项目树", "推送状态", "预览与体检", "工程脚本", "预设包"];
+		const panelProbe = await cdp.evaluate(`(() => {
+			const labels = [...document.querySelectorAll("button")].map((node) => (node.textContent ?? "").trim());
+			return ${JSON.stringify(tabLabels)}.filter((label) => labels.includes(label));
+		})()`);
+		const foundTabs = Array.isArray(panelProbe.value) ? panelProbe.value : [];
+		if (foundTabs.length !== tabLabels.length) {
+			fail(`点开面板后只找到 ${foundTabs.length}/${tabLabels.length} 个页签：[${foundTabs.join(", ")}]`);
+		} else {
+			pass(`点开面板后五个页签都在：${foundTabs.join(" / ")}`);
+		}
+
+		// 3) 逐个拨动页签，确认每个页签的组件都真的渲染得出来。
+		let switched = 0;
+		for (const label of tabLabels) {
+			const clicked = await cdp.evaluate(`(() => {
+				const button = [...document.querySelectorAll("button")].find((node) => (node.textContent ?? "").trim() === ${JSON.stringify(label)});
+				if (button === undefined) return false;
+				button.click();
+				return true;
+			})()`);
+			if (clicked.value === true) switched += 1;
+			await sleep(260);
+		}
+		if (switched === tabLabels.length) pass(`五个页签都能点到并渲染（逐个拨动，含各自的数据加载）`);
+		else fail(`只有 ${switched}/${tabLabels.length} 个页签能被点到`);
+
+		// 4) 回到「推送状态」，点「重置记录」，等一次真实 RPC 往返。
+		await cdp.evaluate(`(() => {
+			const tab = [...document.querySelectorAll("button")].find((node) => (node.textContent ?? "").trim() === "推送状态");
+			if (tab !== undefined) tab.click();
+			return true;
+		})()`);
+		await sleep(500);
+		const resetClicked = await cdp.evaluate(`(() => {
+			const button = [...document.querySelectorAll("button")].find((node) => (node.textContent ?? "").includes("重置记录"));
+			if (button === undefined) return false;
+			button.click();
+			return true;
+		})()`);
+		await sleep(1800);
+
+		const rpcLogProbe = await cdp.evaluate(`globalThis.__dshMcpRpc ?? []`);
+		const rpcLog = Array.isArray(rpcLogProbe.value) ? rpcLogProbe.value : [];
+		const resetCall = rpcLog.find((row) => String(row?.url ?? "").includes("desktopProject/projectResetPushState"));
+		if (resetClicked.value !== true) {
+			info("没找到「重置记录」按钮（面板结构可能变了），跳过 RPC 往返断言");
+		} else if (resetCall === undefined) {
+			fail(`点了「重置记录」却没有 fetch 打到 projectResetPushState（记到 ${rpcLog.length} 条：${rpcLog.map((row) => row.url).slice(0, 4).join(" | ") || "无"}）`);
+		} else if (resetCall.ok !== true) {
+			fail(`projectResetPushState 往返失败：HTTP ${resetCall.status}，信封 ok=${JSON.stringify(resetCall.ok)}`);
+		} else {
+			pass(`面板发出的一次真实 RPC 往返成功：HTTP ${resetCall.status} ok=true → ${resetCall.url}`);
+		}
+		const otherCalls = rpcLog.filter((row) => String(row?.url ?? "").includes("/api/desktopProject/")).length;
+		if (otherCalls > 0) info(`面板本轮共发出 ${otherCalls} 条 /api/desktopProject/* 请求（含各页签自动加载）`);
+	}
+
 	const ours = [...exceptions, ...consoleErrors].filter((text) => /dsh-magical-lowcode-project|desktopProject/.test(String(text)));
 	if (ours.length > 0) {
 		fail(`有 ${ours.length} 条与本插件相关的运行时错误：`);

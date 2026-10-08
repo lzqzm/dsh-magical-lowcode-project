@@ -106,9 +106,13 @@ npm test
 #                               逐个拨动五个页签的 active，断言页签标签顺序与侧边栏入口结构
 ```
 
-两个桩检补的是空档：`verify.mjs` 只看字节，浏览器检查在拒绝启动浏览器的环境里跑不了，
-而桩检既不需要浏览器也不需要网络 —— 逻辑层还能覆盖 `apply` 的降级分支（`remote` / `slots`
-缺失时是否优雅退出），渲染层则证明五个页签都真的画得出来。
+两个桩检补的是空档：`verify.mjs` 只看字节，而桩检既不需要浏览器也不需要网络 ——
+逻辑层还能覆盖 `apply` 的降级分支（`slots` 缺失时是否优雅退出），渲染层则证明
+五个页签都真的画得出来。
+
+但它们覆盖不到**真实 loader 与真实点击**：客户端半边曾经在真实浏览器里以
+`descriptor.parameters is not iterable` **整体加载失败**，而三个桩检当时全是绿的。
+只有下面那条浏览器真机检查抓得出来 —— 所以它不是可选项。
 
 `prepublishOnly` 跑同样这三步，所以发布前必然过一遍。
 
@@ -125,9 +129,13 @@ node test/installed-check.mjs --from-profile <profileDir>
 node test/browser-check.mjs "http://127.0.0.1:<port>/?token=<token>"
 ```
 
-它用 headless Chromium 打开真实界面，断言 `__DSH_BOOT__` 里有本插件的 boot 行、
-侧边栏出现本插件注册的按钮（`title="低代码工程模式"`），且没有涉及本插件的运行时异常。
-⚠️ 它需要能启动 Chromium 的环境；在拒绝启动浏览器的沙箱里会停在「连不上调试端口」。
+它用 headless Chromium 打开真实界面，点开侧边栏入口、逐个拨动五个页签，并断言：
+`__DSH_BOOT__` 里有本插件的 boot 行；侧边栏出现本插件注册的按钮
+（`title="低代码工程模式"`）；五个页签都在且都能点得动；点「重置记录」时一次真实
+RPC 走 `/api/desktopProject/projectResetPushState` 并返回 `ok=true`；没有任何涉及
+本插件的运行时异常。
+⚠️ 它需要能启动 Chromium（以及创建命名管道）的环境；受限沙箱里 Chrome 会以
+`OpenProcess: 拒绝访问 (0x5)` 直接退出。
 
 一次性的真机验证流程：
 

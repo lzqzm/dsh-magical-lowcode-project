@@ -101,22 +101,10 @@ function makeCtx(options = {}) {
 			return () => {};
 		},
 	};
-	const rpcHandle = { __rpc: true };
 	const ctx = {
-		remote:
-			options.withoutRemote === true
-				? undefined
-				: {
-						async $mount(contribution) {
-							record.mounts.push(contribution);
-							if (options.mountThrows === true) throw new Error("mount failed (桩)");
-							return () => {};
-						},
-					},
 		get(name) {
 			record.gets.push(name);
 			if (name === "slots") return options.withoutSlots === true ? undefined : slots;
-			if (name === "remote.desktopProject") return rpcHandle;
 			return undefined;
 		},
 		effect(execute, label) {
@@ -151,8 +139,8 @@ if (registration !== undefined) {
 			if (typeof exported.apply !== "function") fail("导出里没有 apply 函数");
 			else pass("导出含 apply 函数");
 			if (!Array.isArray(exported.inject)) fail("导出里没有 inject 数组");
-			else if (exported.inject.join() !== "remote") fail(`inject 应为 ["remote"]，实际 [${exported.inject.join(", ")}]`);
-			else pass('导出 inject = ["remote"]');
+			else if (exported.inject.join() !== "slots") fail(`inject 应为 ["slots"]（RPC 走浏览器 fetch，不再需要 remote 服务），实际 [${exported.inject.join(", ")}]`);
+			else pass('导出 inject = ["slots"]');
 
 			if (typeof exported.apply === "function") {
 				const { ctx, record } = makeCtx();
@@ -171,31 +159,21 @@ if (registration !== undefined) {
 				} else {
 					pass("apply(ctx) 正常路径未抛错");
 
-					/* 3.1 $mount 的 contribution */
-					if (record.mounts.length !== 1) fail(`apply 应恰好调用一次 remote.$mount，实际 ${record.mounts.length} 次`);
-					else {
-						const contribution = record.mounts[0];
-						if (contribution.package !== "dsh-magical-lowcode-project") {
-							fail(`contribution.package 是 "${contribution.package}"，必须等于包名`);
-						} else pass(`contribution.package = ${contribution.package}`);
-						const descriptors = Array.isArray(contribution.descriptors) ? contribution.descriptors : [];
-						const names = descriptors.map((d) => d?.method);
-						if (names.join() !== hostMethods.join()) {
-							fail(`descriptor 方法表与 host 的 markRemote 列表不一致：\n  mount  = [${names.join(", ")}]\n  host   = [${hostMethods.join(", ")}]`);
-						} else {
-							pass(`$mount 声明的 ${names.length} 个 method 与 lib/index.js 的 markRemote 列表逐字一致（含顺序）`);
-						}
-						const withCodec = descriptors.filter((d) => d !== null && typeof d === "object" && Object.keys(d).length > 1);
-						if (withCodec.length > 0) info(`${withCodec.length} 个 descriptor 带了额外字段（预期只有 { method }）`);
+					/*
+					 * 3.1 回归锁：绝不能再走 ctx.remote.$mount。
+					 * 那条路要的是构建期生成的 typed contribution（codec/schema/parameters），
+					 * 运行期手写的 { method } 形状会在真实浏览器里以
+					 * `descriptor.parameters is not iterable` 崩掉（2026-10-08 实测）。
+					 */
+					if (record.mounts.length !== 0) {
+						fail(`apply 不应调用 remote.$mount，实际 ${record.mounts.length} 次`);
+					} else {
+						pass("apply 不经过 remote.$mount（RPC 走浏览器 fetch 信封）");
 					}
 
 					/* 3.2 服务查询 */
-					for (const needed of ["remote.desktopProject", "slots"]) {
-						if (!record.gets.includes(needed)) fail(`apply 从未查询服务 "${needed}"`);
-					}
-					if (record.gets.includes("remote.desktopProject") && record.gets.includes("slots")) {
-						pass(`apply 查询了 remote.desktopProject 与 slots（共 ${record.gets.length} 次 get）`);
-					}
+					if (!record.gets.includes("slots")) fail('apply 从未查询服务 "slots"');
+					else pass(`apply 查询了 slots（共 ${record.gets.length} 次 get）`);
 
 					/* 3.3 slot 注册 */
 					const expectedSlots = ["settings.section", "sidebar.footer.action"];
@@ -240,14 +218,8 @@ if (registration !== undefined) {
 						if (allOk) pass("两个 slot 的 contribution 字段齐全、组件可调用、且都经 slots.inject 包裹");
 					}
 
-					/* 3.4 effect 清理 */
-					if (record.effects.length === 0) fail("apply 没有通过 ctx.effect 建立任何清理");
-					else {
-						const labelled = record.effects.filter((label) => typeof label === "string" && label.includes("dsh-magical-lowcode-project"));
-						if (labelled.length !== record.effects.length) {
-							info(`有 ${record.effects.length - labelled.length} 条 effect 的 label 没有带包名前缀：[${record.effects.join(" | ")}]`);
-						} else pass(`${record.effects.length} 条 ctx.effect 都带了包名前缀的 label`);
-					}
+					/* 3.4 清理：disposer 由 slots.inject 负责，本插件不再自建 ctx.effect。 */
+					if (record.effects.length !== 0) info(`apply 建立了 ${record.effects.length} 条 ctx.effect（当前实现预期为 0）`);
 				}
 			}
 		}
@@ -256,7 +228,7 @@ if (registration !== undefined) {
 
 /* ------------------------------------------------------------ 4. 降级路径 */
 
-async function degrade(label, options, expectMount) {
+async function degrade(label, options) {
 	if (registration?.factory === undefined) return;
 	const exported = registration.factory(requireStub);
 	const { ctx, record } = makeCtx(options);
@@ -270,16 +242,10 @@ async function degrade(label, options, expectMount) {
 		fail(`${label}：apply 应当优雅退出，却抛了 ${thrown?.message ?? thrown}`);
 		return;
 	}
-	const mounted = record.mounts.length > 0;
-	if (mounted !== expectMount) {
-		fail(`${label}：预期 ${expectMount ? "发生" : "不发生"} $mount，实际 ${mounted ? "发生" : "未发生"}`);
-		return;
-	}
-	pass(`${label}：优雅退出，未抛错（$mount ${mounted ? "发生" : "跳过"}）`);
+	pass(`${label}：优雅退出，未抛错（注册 ${record.registers.length} 个 slot）`);
 }
 
-await degrade("remote 服务缺失", { withoutRemote: true }, false);
-await degrade("slots 服务缺失", { withoutSlots: true }, true);
+await degrade("slots 服务缺失", { withoutSlots: true });
 
 /* ------------------------------------------------------------ 输出 */
 

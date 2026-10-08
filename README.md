@@ -108,10 +108,13 @@ npm test
 #                                order and the sidebar entry structure
 ```
 
-The two stub checks close a gap: `verify.mjs` only reads bytes, and the browser check cannot run where
-a browser cannot launch — while the stub checks need neither a browser nor a network. The logic layer
-also covers `apply`'s degradation branches (does it exit cleanly when `remote` / `slots` are missing),
-and the render layer proves all five tabs actually paint.
+The two stub checks close a gap: `verify.mjs` only reads bytes, while the stub checks need neither a
+browser nor a network. The logic layer also covers `apply`'s degradation branches (does it exit cleanly
+when `slots` is missing), and the render layer proves all five tabs actually paint.
+
+What they cannot cover is the real loader and real clicks: the client half once failed to load in a
+real browser with `descriptor.parameters is not iterable` while all three stub checks stayed green.
+Only the browser check below catches that class of bug, so it is not optional.
 
 `prepublishOnly` runs the same three steps, so a publish cannot skip them.
 
@@ -128,9 +131,11 @@ Browser check for the client half (the only check that proves `apply()` really r
 node test/browser-check.mjs "http://127.0.0.1:<port>/?token=<token>"
 ```
 
-It drives a headless Chromium against a live UI and asserts that `__DSH_BOOT__` carries this
-plugin's boot row, that the sidebar shows the button this plugin registers
-(`title="低代码工程模式"`), and that no runtime error mentions the plugin.
+It drives a headless Chromium against a live UI, opens the sidebar entry, flips through all five tabs,
+and asserts that `__DSH_BOOT__` carries this plugin's boot row, that the sidebar shows the button this
+plugin registers (`title="低代码工程模式"`), that all five tabs are present and clickable, that clicking
+「重置记录」 produces a real RPC to `/api/desktopProject/projectResetPushState` returning `ok=true`,
+and that no runtime error mentions the plugin.
 ⚠️ It needs an environment that can launch Chromium; in a sandbox that refuses to start a
 browser it stops at "cannot reach the debugging port".
 

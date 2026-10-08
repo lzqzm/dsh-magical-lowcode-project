@@ -31,6 +31,10 @@
 - 自包含 Web 面板，五个页签：项目树 / 推送状态 / 预览与体检 / 工程脚本 / 预设包
 - 侧边栏底部一个入口，打开同一面板的浮层副本
 - 手写经典 script 产物，React 与 UI 基元全部复用宿主 shell 的种子表（不打包、不重复引入 React）
+- 面板与 host 的 RPC 走**同源 fetch 信封**（`POST /api/desktopProject/<method>`），
+  不依赖构建期产出的 typed contribution，也不需要宿主提供 `remote` 服务
+- 已在真实浏览器（headless Chromium）里实测：点开入口、五个页签逐个切换、
+  点「重置记录」触发一次真实 RPC 往返（7/0）
 - **不修改任何 `@deepseek-ai/*` 核心包**
 
 **兼容性与依赖**

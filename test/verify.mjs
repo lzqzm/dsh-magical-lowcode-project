@@ -263,6 +263,67 @@ else {
 		else pass(`注册 ${registerKeys.length} 个 slot（${registerKeys.join(", ")}），全部经 slots.inject 包裹`);
 	}
 
+	/*
+	 * UI 基元契约回归锁。
+	 *
+	 * 这些值不是猜的：`@deepseek-ai/dsh-client-ui-primitives` 在本机**不是真实安装的包**
+	 * （没有目录、没有 .d.ts），它只作为 web 前端 bundle 里的种子表条目存在
+	 * （PLATFORM_MODULES，见 ...\dsh-web-frontend\dist\assets\index-*.js）。以下契约是从那份
+	 * 真实实现里逆推出来的：
+	 *   Button = ({variant="ghost", size="md", icon, className, children, ...rest})
+	 *            样式查表 ro = {button, md, sm, primary, ghost, outline, toolbar, icon}
+	 *            —— 取值写错不会抛错，只会静默退化成默认样式，所以必须锁住。
+	 *   Pill   = ({active=false, className, children, onClick, ...rest})
+	 *            **onClick 存在时渲染 <button>、否则渲染 <span>** —— 页签切换完全依赖这一点，
+	 *            少传 onClick 就等于页签点不动，且不会有任何报错。
+	 *   Tag    = ({tone="outline", className, children})
+	 *   Input  = ({icon, className, ...rest}) → rest 透传给原生 <input>（value/onChange/placeholder 均可用）
+	 *   Modal  = ({open, onClose, title, closeLabel, description, children, footer, headless})
+	 * 复跑逆推脚本：<workspace>/docs/_uiprobe.mjs 与 <workspace>/docs/_uiprobe2.mjs
+	 */
+	const VERIFIED_PRIMITIVES = new Set(["Button", "Input", "Modal", "Pill", "Tag"]);
+	const BUTTON_VARIANTS = new Set(["ghost", "primary", "outline", "toolbar"]);
+	const BUTTON_SIZES = new Set(["md", "sm", "icon"]);
+	/** 官方已占用的 slot id；撞上会 shadow 掉官方条目。 */
+	const OFFICIAL_SLOT_IDS = new Map([
+		["settings.section", new Set(["general", "models", "plugins", "agent-presets"])],
+		["sidebar.footer.action", new Set(["cordis-panel"])],
+	]);
+
+	const usedPrimitives = [...new Set([...clientSource.matchAll(/\bUI\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1]))].sort();
+	const unverifiedPrimitives = usedPrimitives.filter((name) => !VERIFIED_PRIMITIVES.has(name));
+	if (unverifiedPrimitives.length > 0) {
+		fail(
+			`面板用了未经契约核实的 UI 基元：${unverifiedPrimitives.join(", ")} —— 先跑 docs/_uiprobe.mjs 逆推其 props，再把名字加进 VERIFIED_PRIMITIVES`,
+		);
+	} else pass(`面板用到的 ${usedPrimitives.length} 个 UI 基元均有实测契约（${usedPrimitives.join(", ")}）`);
+
+	const badVariants = [...new Set([...clientSource.matchAll(/variant\s*:\s*["']([^"']+)["']/g)].map((m) => m[1]))].filter(
+		(value) => !BUTTON_VARIANTS.has(value),
+	);
+	if (badVariants.length > 0) fail(`Button variant 取值不在实测样式表内（会静默退化成默认样式）：${badVariants.join(", ")}`);
+	else pass("Button variant 取值全部命中实测样式表");
+
+	const badSizes = [...new Set([...clientSource.matchAll(/(?:^|[^A-Za-z])size\s*:\s*["']([^"']+)["']/g)].map((m) => m[1]))].filter(
+		(value) => !BUTTON_SIZES.has(value),
+	);
+	if (badSizes.length > 0) fail(`Button size 取值不在实测样式表内：${badSizes.join(", ")}`);
+	else pass("Button size 取值全部命中实测样式表");
+
+	/* 注册的 id 不得撞上官方占用（ENTRY_ID 是常量，需解引用后再比）。 */
+	const entryId = (clientSource.match(/const\s+ENTRY_ID\s*=\s*["']([^"']+)["']/) ?? [undefined, undefined])[1];
+	const registrations = [...clientSource.matchAll(/slots\.register\(\s*\{([^}]*)\}/g)].map((m) => {
+		const body = m[1];
+		return {
+			name: (body.match(/name\s*:\s*["']([^"']+)["']/) ?? [undefined, undefined])[1],
+			id: (body.match(/\bid\s*:\s*["']([^"']+)["']/) ?? [undefined, entryId])[1],
+		};
+	});
+	const clashes = registrations.filter((entry) => entry.name !== undefined && entry.id !== undefined && OFFICIAL_SLOT_IDS.get(entry.name)?.has(entry.id) === true);
+	if (clashes.length > 0) {
+		fail(`注册的 slot id 与官方占用冲突（会 shadow 官方条目）：${clashes.map((c) => `${c.name}#${c.id}`).join(", ")}`);
+	} else pass(`注册的 ${registrations.length} 个 slot id 均未与官方占用冲突`);
+
 	// 两个半边声明的 RPC 方法集必须一致。
 	if (hostSource !== undefined) {
 		const hostList = hostSource.match(/for \(const remoteMethod of \[([\s\S]*?)\]\)/);

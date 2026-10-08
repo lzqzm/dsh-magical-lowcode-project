@@ -1,6 +1,6 @@
 {
   "name": "dsh-magical-lowcode-project",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "DeepSeek Harness 低代码工程模式插件：工作区项目文件树、推送状态(push status)、脚本运行、页面预览装配、推送前静态校验(lint) 的 host RPC，加插件自带 Web 面板与 Agent 预设包(.dshpreset)导入导出端点。Low-code project mode plugin for DeepSeek Harness.",
   "type": "module",
   "main": "lib/index.js",

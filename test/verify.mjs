@@ -481,6 +481,51 @@ for (const lang of ["zh", "en"]) {
 	}
 }
 
+/* --------------------------------------------------- 5.5 screenshots.json */
+/*
+ * 市场详情页的截图由仓库自己声明：package.json 旁边一个 screenshots.json，
+ * 里面 1-8 条相对本文件的路径（见上游 contributing.md「Screenshots / 截图」）。
+ * 上游站点构建会去探这些路径，写错了在商店里就是一张裂图，所以这里锁住。
+ */
+{
+	const shotsPath = join(root, "screenshots.json");
+	if (!existsSync(shotsPath)) {
+		fail("缺少 screenshots.json（市场详情页的截图靠它声明）");
+	} else {
+		try {
+			const parsed = JSON.parse(readFileSync(shotsPath, "utf8"));
+			const list = Array.isArray(parsed) ? parsed : parsed?.screenshots;
+			if (!Array.isArray(list)) {
+				fail("screenshots.json 必须是数组，或形如 { screenshots: [...] }");
+			} else if (list.length < 1 || list.length > 8) {
+				fail(`screenshots.json 条目数 ${list.length} 不在 1-8 之间`);
+			} else {
+				let missing = 0;
+				let remote = 0;
+				for (const item of list) {
+					if (typeof item !== "string" || item.trim() === "") {
+						fail("screenshots.json 里有非字符串条目");
+						missing += 1;
+						continue;
+					}
+					if (/^(https?:)?\/\//i.test(item)) {
+						remote += 1;
+						continue;
+					}
+					if (!existsSync(join(root, item))) {
+						fail(`screenshots.json 指向的图片不存在：${item}`);
+						missing += 1;
+					}
+				}
+				if (missing === 0) pass(`screenshots.json OK（${list.length} 张，全部是仓库内的相对路径）`);
+				if (remote > 0) warn(`screenshots.json 有 ${remote} 条绝对 URL（上游建议用相对路径，改名时才会立刻暴露）`);
+			}
+		} catch (error) {
+			fail(`screenshots.json 不是合法 JSON：${error.message}`);
+		}
+	}
+}
+
 /* -------------------------------------------------------------- 6. 交付清单 */
 for (const required of ["README.md", "README.zh.md", "LICENSE"]) {
 	if (!existsSync(join(root, required))) fail(`缺少 ${required}`);

@@ -34,6 +34,7 @@ const read = (rel) => readFileSync(join(root, rel), "utf8");
 /* ------------------------------------------------- 1. 以经典 script 执行 bundle */
 
 const clientSource = read("lib/client.js");
+const hostSource = read("lib/index.js");
 const captured = {};
 const store = new Map();
 const sandbox = {
@@ -899,38 +900,30 @@ if (!components.has("conversation.view")) {
 	}
 }
 
-/* ------------- 16. 大文件改走系统编辑器：浏览器不碰文本（0.2.22） */
+/* ------------- 16. 「用编辑器打开」已整条移除（0.2.25） */
 
 /**
- * 用户在 0.2.21 截图后的结论：「太小了，而且这样子把代码分页处理不方便」。
- * 根因没变：浏览器在**可编辑文本控件**里做长距离原生选区会死锁（Chromium 154 的
- * Blink>Editing>Selection）。所以正解不是把编辑区做大，而是浏览器根本不碰文本：
- * 插件只把路径交给宿主，宿主 detached spawn 系统编辑器（VS Code / 记事本 / 文件管理器）。
- * 插件内分页编辑器保留，但三个入口（工具行 / 右键菜单 / 分页对话框）都以「用编辑器打开」为先。
+ * 用户（m05044）：「用编辑器打开的功能可以去掉了」。
+ * 0.2.22 加的那条旁路（host 挑程序 + detached spawn、`projectOpenExternal` RPC、
+ * 工具行 / 右键菜单 / 分页对话框三个入口）不值得继续占位置：浏览器内就能改
+ * （双击一行 / 改这段 / 分页编辑），要让 AI 改就点「引用到输入框」。
  */
 {
-	if (!/projectOpenExternal: \["path"\]/.test(clientSource)) fail("METHOD_PARAMS 里没有 projectOpenExternal");
-	else pass("projectOpenExternal 登记进 METHODS / METHOD_PARAMS（对应 host 同名 RPC）");
+	if (/projectOpenExternal|openExternal|openEditor|用编辑器打开|onOpenExternal/.test(clientSource)) {
+		fail("lib/client.js 里还留着「用编辑器打开」的痕迹");
+	} else pass("lib/client.js 已清干净：没有 projectOpenExternal / openExternal / openEditor / 用编辑器打开 / onOpenExternal");
 
-	if (!/const openExternal = useCallback/.test(clientSource)) fail("没有 openExternal 回调");
-	else pass("openExternal 把路径发给宿主，由系统里的编辑器打开");
-
-	if (!/onClick: \(\) => openExternal\(selected\.path\) \}, "用编辑器打开"\)/.test(clientSource)) fail("工具行没有「用编辑器打开」按钮");
-	else pass("工具行的「用编辑器打开」直接开当前文件");
-
-	if (!/label: "🖥 用编辑器打开"/.test(clientSource)) fail("文件右键菜单没有「用编辑器打开」");
-	else pass("文件右键菜单也有「用编辑器打开」");
-
-	if (!/onOpenExternal: openExternal/.test(clientSource)) fail("PatchDialog 没接上 onOpenExternal");
-	else pass("PatchDialog 接上 onOpenExternal（分页框里也能一键交给系统编辑器）");
+	if (/projectOpenExternal|resolveExternalEditor|openFileExternally|DSHML_EDITOR/.test(hostSource)) {
+		fail("lib/index.js 里还留着「用编辑器打开」的痕迹（含 DSHML_EDITOR）");
+	} else pass("lib/index.js 已清干净：没有 projectOpenExternal / resolveExternalEditor / openFileExternally / DSHML_EDITOR");
 
 	const FILE = { status: "ready", path: "C:\\proj\\pages\\index.html", content: "line one\nline two", editing: false };
 	try {
 		const tree = renderSettingsWith({ "TreeTab#4": FILE });
 		const all = textOf(tree);
-		if (!all.includes("用编辑器打开")) fail("查看态没渲染「用编辑器打开」");
-		else if (all.indexOf("用编辑器打开") > all.indexOf("复制全文")) fail("「用编辑器打开」应排在「编辑」「复制全文」之前（它现在是主路）");
-		else pass("查看态里「用编辑器打开」排在「编辑」「复制全文」之前（主路）");
+		if (all.includes("用编辑器打开")) fail("查看态还渲染「用编辑器打开」");
+		else if (!all.includes("引用到输入框")) fail("查看态少了「引用到输入框」（工具行被删空了？）");
+		else pass("查看态工具行只剩「引用到输入框 / 编辑 / 复制全文 / 关闭」（0.2.25）");
 
 		const editing = renderSettingsWith({
 			"TreeTab#4": FILE,
@@ -941,11 +934,11 @@ if (!components.has("conversation.view")) {
 			if (modal === null && n.kind === "host" && n.name === primitivesStub.Modal) modal = n;
 		});
 		if (modal === null) fail("编辑态没渲染出分页对话框");
-		else if (!textOf(modal).includes("用编辑器打开")) fail("分页对话框里没有「用编辑器打开」");
+		else if (textOf(modal).includes("用编辑器打开")) fail("分页对话框里还有「用编辑器打开」");
 		else if (!/编辑框大小：/.test(clientSource)) fail("分页对话框里没有「编辑框大小：」这一行");
-		else pass("分页对话框里也能一键交给系统编辑器，并给出「编辑框大小」三档（0.2.24）");
+		else pass("分页对话框只剩「替换这 N 行 / 复制给 AI 改 / 取消」+「编辑框大小」三档（0.2.24 保留）");
 	} catch (error) {
-		fail(`外部编辑器渲染抛错：${error?.message ?? error}`);
+		fail(`移除「用编辑器打开」后的渲染抛错：${error?.message ?? error}`);
 	}
 }
 
@@ -1072,8 +1065,8 @@ if (!components.has("conversation.view")) {
 		const tree = renderProjectView({ inputActions: actions }, { "TreeTab#4": FILE });
 		const all = textOf(tree);
 		if (!all.includes("引用到输入框")) fail("查看态没渲染「引用到输入框」");
-		else if (all.indexOf("引用到输入框") > all.indexOf("用编辑器打开")) fail("「引用到输入框」应排在「用编辑器打开」之前（让 AI 改才是主路）");
-		else pass("查看态里「引用到输入框」排在「用编辑器打开」之前");
+		else if (all.includes("用编辑器打开")) fail("查看态还渲染着已移除的「用编辑器打开」（0.2.25）");
+		else pass("查看态工具行只有「引用到输入框」（旧「用编辑器打开」已移除）");
 
 		let button = null;
 		walk(tree, (n) => {

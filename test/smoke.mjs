@@ -33,7 +33,6 @@ const EXPECTED_METHODS = [
 	"projectDeleteEntry",
 	"projectReadFile",
 	"projectWriteFile",
-	"projectOpenExternal",
 	"projectAssemblePreview",
 	"projectLint"
 ];

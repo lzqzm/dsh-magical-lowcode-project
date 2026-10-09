@@ -3,6 +3,33 @@
 本文件只记面向使用者的变更。插件市场在「更新内容」处会展示版本说明或提交记录，
 所以每个版本都留一条。
 
+## 0.2.25
+
+用户一句话：「用编辑器打开的功能可以去掉了」。0.2.22 加的这条旁路（把文件递给 VS Code / 记事本 /
+文件管理器的那个功能）就此整条移除 —— 0.2.23 起浏览器内本来就能改（双击一行 / 改这段 / 分页编辑），
+要让 AI 改就点「引用到输入框」，外面那个编辑器没有再留着的理由。
+
+- **删：`projectOpenExternal` RPC** —— host 半边的方法、`markRemote` 清单、文件头注释里的那一行，
+  以及它专用的 `resolveExternalEditor()` / `openFileExternally()` / `EXTERNAL_EDITOR_ENV`（环境变量
+  `DSHML_EDITOR`）全部删掉；`node:fs` 的 `existsSync` 导入随之不再需要，也一并去掉。RPC 从
+  15 个变成 14 个（`test/smoke.mjs` 的 14/14 Remote 标记核对通过）。
+- **删：三个入口** —— 工具行的「用编辑器打开」按钮、文件行右键菜单里的「🖥 用编辑器打开」、
+  编辑对话框里的「用编辑器打开」按钮；client 的 `openExternal` 回调、`METHODS` / `METHOD_PARAMS`
+  登记、`PatchDialog` 的 `onOpenExternal` 口子、只读提示语里那句「留给想在外面的 VS Code 里改的
+  情况」，全部清掉。右栏工具行现在只剩「引用到输入框 / 编辑 / 复制全文 / 关闭」。
+- **删：`test/open-check.mjs`** —— 那个文件桩测的就是 `resolveExternalEditor` 的挑程序顺序，
+  连 `package.json` 里的 `test:open` 脚本与 `npm test` / `prepublishOnly` 链上的那一环一起去掉。
+- **改：** `test/verify.mjs` 里 0.2.22 那一段断言反过来 —— 现在断言两侧源码里**不再出现**
+  `projectOpenExternal` / `resolveExternalEditor` / `openFileExternally` / `DSHML_EDITOR` /
+  `openExternal` / `onOpenExternal` / 「用编辑器打开」；`test/render-check.mjs` 第 16 节同样改为
+  「已整条移除」核对（查看态工具行不再有该按钮、分页对话框里也没有），并把 0.2.23 那两条
+  「排在『用编辑器打开』之前」的顺序断言改掉。
+- **测试：** `test/verify.mjs` 43 项不变（断言换向而非减少）、`test/render-check.mjs` 136 → 133 项、
+  `test/smoke.mjs` 14/14 Remote 标记；`npm test` 全绿。
+
+> 这次**两个半边都动了**：host 侧删了 RPC 与 `markRemote` 条目，所以要**重启 DSH** 才生效
+> （客户端部分刷新页面即可）。
+
 ## 0.2.24
 
 0.2.23 把编辑对话框做成了近全屏，用户随即只回一句：「编辑打开的内容太大了」。而更早的 0.2.17 又有人嫌

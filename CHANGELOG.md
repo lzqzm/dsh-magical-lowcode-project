@@ -3,6 +3,25 @@
 本文件只记面向使用者的变更。插件市场在「更新内容」处会展示版本说明或提交记录，
 所以每个版本都留一条。
 
+## 0.2.0
+
+跟随 DSH 0.2.0 的 Agent 预设模型改造；装到 0.2.0 宿主上不再被判为不兼容。
+
+- **修：与 DSH 0.2.0 不兼容。** 0.2.0 把 `@deepseek-ai/dsh-agent-presets` 拆成了
+  `@deepseek-ai/dsh-agent-preset`（预设声明行）+ `@deepseek-ai/dsh-agent-preset-registry`（提供 `agentPresets` 服务），
+  预设不再是磁盘目录。旧的 peer 范围 `^0.1.5-0` 会让 `evaluatePluginCompatibility` 在 0.2.0 宿主上直接判不兼容，
+  插件管理器连装都不让装。现在 peer 是 `@deepseek-ai/dsh-agent-preset-registry` 与
+  `@deepseek-ai/dsh-typert-protocol`（均 `^0.2.0-0`），`engines.dsh` / `dshhub.compatibility.dsh` 升到 `>=0.2.0-0`。
+- **改：`.dshpreset` 导出改为读预设声明。** 不再遍历预设目录，改用 `agentPresets.list()`
+  + `agentPresets.readDocument(id)` 取插件清单，写进包内 `preset/agent.cordis.yml`（沿用 0.1.x 的
+  `COMPOSITION_FILE` 值；包格式仍是 `format: "dsh-preset"` / `version: 1`）。0.2.0 里内置与自定义都是声明，
+  不再有 `trust` 之分，所以内置预设也可以导出，旧的 403 分支已删除。
+- **改：`.dshpreset` 导入改为写 profile patch。** 0.2.0 没有「用户预设根」可写，安装时把
+  `{id, name, description, plugins}` 作为一行 `@deepseek-ai/dsh-agent-preset` 声明 INSERT 进 profile 的
+  `cordis.patch.yml`（取自 `ctx.get("profileContext").patchPath`），先写临时文件再原子 rename；
+  已有同 id 声明时返回 409。插件清单必须是 YAML 序列，`!!js` 表达式原样保留；预览新增 `pluginCount`。
+- 新增依赖 `yaml`（读写 profile patch）；`test/verify.mjs` 的宿主区间与 peer 名单、README、使用文档同步更新。
+
 ## 0.1.1
 
 面板在真实界面上被看到之后修的版式缺陷，外加一处日常使用上的便利改动。

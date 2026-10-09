@@ -9,7 +9,7 @@
  * 为什么不能直接 `import("dsh-magical-lowcode-project")`：Node 的裸说明符解析
  * 相对**发起 import 的文件**所在目录，而不是 cwd，所以脚本放哪儿都解得不对。
  * 因此这里显式拿到已安装包目录，用绝对 file URL 去 import，让包内
- * `import "fflate"` / `import "@deepseek-ai/dsh-agent-presets"` 按真实安装布局
+ * `import "fflate"` / `import "yaml"` / `import "@deepseek-ai/dsh-typert-protocol"` 按真实安装布局
  * 逐级向上解析 —— 这才是要测的东西。
  *
  * 用法：

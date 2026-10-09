@@ -43,15 +43,17 @@ const EXPECTED_NAME = "dsh-magical-lowcode-project";
 
 /*
  * 宿主兼容性字面量（回归锁）。这两个值的来历是实测矩阵，不是随手写的：
- *   - dshmarket 读的是 `engines.dsh`（**不是** dsh.compatibility / dshhub，那两个键零引用）；
- *   - 判定用 includePrerelease 语义，同 major.minor.patch 元组的预发布才被接纳；
- *   - `engines.dsh = ">=0.1.0-rc.5 <0.2.0-0"` 在 0.1.5-rc.1 ~ 0.1.7-rc.1 全 PASS，0.2.0-rc.1 fail（有意上界）；
- *   - peer 下界不得高于宿主 0.1.5-rc.1：`^0.1.5-rc.2` 会被当场 HTTP 400 拒绝；
- *   - `^0.1.5-0` 既能覆盖 0.1.5-rc.1（闸门 PASS），又能被 semver 正确解析到 0.1.5-rc.2（同元组带预发布）。
+ *   - 0.2.0 起上游把 preset 模型从「磁盘目录 + dsh-agent-presets 服务」换成
+ *     「profile patch 里的一行 `@deepseek-ai/dsh-agent-preset` 声明 + `@deepseek-ai/dsh-agent-preset-registry` 服务」；
+ *     旧的 `@deepseek-ai/dsh-agent-presets` 在 0.2.0 树上已不存在，声明成 peer 会被直接判为不兼容；
+ *   - 判定用 includePrerelease 语义：`^0.2.0-0` 匹配宿主 `0.2.0-rc.2`（预发布下界），0.1.x 范围则不匹配；
+ *   - `engines.dsh` 只放 0.2.0 线：本版实现依赖 0.2.0 的 `agentPresets.readDocument()` 与 `profileContext.patchPath`，
+ *     在 0.1.x 宿主上跑不出正确行为；
+ *   - dshmarket 读的是 `engines.dsh`（**不是** dsh.compatibility / dshhub，那两个键零引用）。
  * 复核脚本：<workspace>/docs/_rangecheck.mjs（复刻 dshmarket satisfiesRange，可重跑）。
  */
-const EXPECTED_HOST_RANGE = ">=0.1.0-rc.5 <0.2.0-0";
-const EXPECTED_PEER_RANGE = "^0.1.5-0";
+const EXPECTED_HOST_RANGE = ">=0.2.0-0";
+const EXPECTED_PEER_RANGE = "^0.2.0-0";
 
 const pkg = readJson("package.json");
 
@@ -82,10 +84,10 @@ if (pkg !== undefined) {
 	for (const [peer, range] of Object.entries(pkg.peerDependencies ?? {})) {
 		if (range !== EXPECTED_PEER_RANGE) {
 			peerRangesOk = false;
-			fail(`peerDependencies["${peer}"] 应为 "${EXPECTED_PEER_RANGE}"，实际 "${range}"：下界高于宿主 0.1.5-rc.1 会被市场 400 拒绝`);
+			fail(`peerDependencies["${peer}"] 应为 "${EXPECTED_PEER_RANGE}"，实际 "${range}"：必须覆盖 0.2.0 线宿主，否则 dsh-app-boot 会判不兼容`);
 		}
 	}
-	if (peerRangesOk) pass(`peer 范围 ${EXPECTED_PEER_RANGE} 覆盖宿主 0.1.5-rc.1`);
+	if (peerRangesOk) pass(`peer 范围 ${EXPECTED_PEER_RANGE} 覆盖 0.2.0 线宿主`);
 
 	const hub = pkg.dshhub ?? {};
 	if (hub.schemaVersion !== 1) fail(`dshhub.schemaVersion 应为 1，实际 ${hub.schemaVersion}`);
@@ -147,7 +149,7 @@ if (pkg !== undefined) {
 	for (const name of Object.keys(deps)) {
 		if (name.startsWith("@deepseek-ai/")) fail(`核心包 ${name} 不能放在 dependencies，必须放 peerDependencies（否则会装出第二份 cordis 实例）`);
 	}
-	for (const name of ["@deepseek-ai/dsh-agent-presets", "@deepseek-ai/dsh-typert-protocol"]) {
+	for (const name of ["@deepseek-ai/dsh-agent-preset-registry", "@deepseek-ai/dsh-typert-protocol"]) {
 		if (!(pkg.peerDependencies ?? {})[name]) fail(`peerDependencies 缺少 ${name}`);
 	}
 	if (Object.keys(deps).every((n) => !n.startsWith("@deepseek-ai/"))) pass("依赖划分正确（核心包在 peerDependencies）");
@@ -193,7 +195,9 @@ else {
 	if (!hostSource.includes(`"${EXPECTED_NAME}"`) && !hostSource.includes(`'${EXPECTED_NAME}'`)) fail(`lib/index.js 里的 name 常量应为 ${EXPECTED_NAME}`);
 	else pass("host 半边导出 { apply, inject, name } 且 name 已改名");
 
-	if (hostSource.includes("0.1.2-alpha.5")) fail("lib/index.js 里仍残留 0.1.2-alpha.5（DSH_SOURCE_VERSION 等需更新到 0.1.5-rc.x）");
+	if (hostSource.includes("0.1.2-alpha.5")) fail("lib/index.js 里仍残留 0.1.2-alpha.5（DSH_SOURCE_VERSION 等需更新到 0.2.0-rc.x）");
+	if (/from\s+["']@deepseek-ai\/dsh-agent-presets["']/.test(hostSource)) fail("lib/index.js 仍 import 旧包 @deepseek-ai/dsh-agent-presets（0.2.0 已无此包，应改用 yaml + profile patch）");
+	if (/from\s+["'](\.[^"']*)["']/.test(hostSource) || /import\s*\(\s*["']\.[^"']*["']\s*\)/.test(hostSource)) fail("lib/index.js 不应有相对路径 import（会被打包成硬编码路径）");
 	if (hostSource.includes("dsh-desktop-project:")) fail("lib/index.js 里仍残留 dsh-desktop-project: 前缀的 effect 标签");
 
 	// 12 个 remote 方法必须都在类里定义

@@ -72,13 +72,13 @@ dsh plugin --profile web add dsh-magical-lowcode-project
 
 ## Compatibility
 
-- Host: `engines.dsh = ">=0.1.0-rc.5 <0.2.0-0"` (developed against `@deepseek-ai/dsh-*` `0.1.5-rc.2`, verified on a `0.1.5-rc.1` host)
+- Host: `engines.dsh = ">=0.2.0-0"` (developed and verified against `@deepseek-ai/dsh-*` `0.2.0-rc.2`)
 - Node.js: `^22.19.0 || >=24.0.0`
 - Platforms: Windows / macOS / Linux
 
-The `<0.2.0-0` upper bound is deliberate: 0.2.x is unverified. The plugin market reads `engines.dsh` before installing and refuses an out-of-range host instead of installing a broken plugin.
+The `0.2.0` floor is deliberate: 0.2.0 changed the agent-preset model (presets are profile-patch declarations served by `@deepseek-ai/dsh-agent-preset-registry`; the old `@deepseek-ai/dsh-agent-presets` package, with its on-disk preset roots, is gone), and this release targets that model. The plugin market reads `engines.dsh` before installing and refuses an out-of-range host instead of installing a broken plugin.
 
-Core packages (`@deepseek-ai/dsh-agent-presets`, `@deepseek-ai/dsh-typert-protocol`) are declared as `peerDependencies`, so the plugin reuses the host's copy instead of installing a second instance.
+Core packages (`@deepseek-ai/dsh-agent-preset-registry`, `@deepseek-ai/dsh-typert-protocol`) are declared as `peerDependencies`, so the plugin reuses the host's copy instead of installing a second instance.
 
 ## Permissions and safety boundaries
 

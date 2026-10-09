@@ -73,13 +73,13 @@ dsh plugin --profile web add dsh-magical-lowcode-project
 
 ## 兼容性
 
-- 宿主：`engines.dsh = ">=0.1.0-rc.5 <0.2.0-0"`（对照 `@deepseek-ai/dsh-*` `0.1.5-rc.2` 开发，已在 `0.1.5-rc.1` 宿主上实测）
+- 宿主：`engines.dsh = ">=0.2.0-0"`（对照 `@deepseek-ai/dsh-*` `0.2.0-rc.2` 开发并实测）
 - Node.js：`^22.19.0 || >=24.0.0`
 - 平台：Windows / macOS / Linux
 
-上界 `<0.2.0-0` 是有意的：0.2.x 尚未验证。插件市场安装前会读 `engines.dsh` 做兼容性判定，落在范围外会被拒绝安装（而不是装上一个坏插件）。
+下界 `0.2.0` 是有意的：0.2.0 换了 Agent 预设模型（预设变成 profile patch 里的一行声明，由 `@deepseek-ai/dsh-agent-preset-registry` 提供；旧的 `@deepseek-ai/dsh-agent-presets` 与其磁盘预设根已不存在），本版就是按这套模型实现的。插件市场安装前会读 `engines.dsh` 做兼容性判定，落在范围外会被拒绝安装（而不是装上一个坏插件）。
 
-核心包（`@deepseek-ai/dsh-agent-presets`、`@deepseek-ai/dsh-typert-protocol`）声明为 `peerDependencies`，**复用宿主自带那一份**，不会装出第二份实例。
+核心包（`@deepseek-ai/dsh-agent-preset-registry`、`@deepseek-ai/dsh-typert-protocol`）声明为 `peerDependencies`，**复用宿主自带那一份**，不会装出第二份实例。
 
 ## 权限与安全边界
 

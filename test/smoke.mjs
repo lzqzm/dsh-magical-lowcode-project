@@ -83,11 +83,20 @@ const { remoteMethods } = await import("@deepseek-ai/dsh-typert-protocol");
 check("import @deepseek-ai/dsh-typert-protocol provides remoteMethods", typeof remoteMethods === "function");
 
 /* 最小假服务：workspaceRegistry.list() 是 ownerOf()/项目根枚举的唯一入口；
- * connection.fetch.register() 只需要存在（apply 里的两条 preset 路由还要求
- * agentPresets 服务存在，本测试**故意不提供** agentPresets，所以那两条路由不会注册）。 */
+ * connection.fetch.register() 只需要存在；agentPresets 提供 list()/readDocument() 两个
+ * 0.2.0 端点用得到的方法 —— 它一到场，apply 里 ctx.inject(["agentPresets"]) 的回调就会跑，
+ * 于是两条 preset fetch 路由被注册（0.2.0 起插件不再 import 旧的 dsh-agent-presets 包）。 */
 const workspaceRegistryStub = {
 	list() {
 		return [];
+	}
+};
+const agentPresetsStub = {
+	async list() {
+		return [];
+	},
+	async readDocument(id) {
+		return { agentPreset: id, content: "[]\n" };
 	}
 };
 const registeredFetchRoutes = [];
@@ -102,16 +111,18 @@ const connectionStub = {
 
 const app = new Context();
 
-/* 先挂一个 stub 插件提供两个必需服务，避免 host 插件停在 PENDING。 */
+/* 先挂一个 stub 插件提供三个必需服务，避免 host 插件停在 PENDING。 */
 const stubFiber = await app.plugin({
 	name: "smoke/stubs",
 	apply(ctx) {
 		ctx.provide("workspaceRegistry", workspaceRegistryStub);
 		ctx.provide("connection", connectionStub);
+		ctx.provide("agentPresets", agentPresetsStub);
 	}
 });
 check("stub services registered (workspaceRegistry)", app.get("workspaceRegistry") === workspaceRegistryStub);
 check("stub services registered (connection)", app.get("connection") === connectionStub);
+check("stub services registered (agentPresets)", app.get("agentPresets") === agentPresetsStub);
 
 let hostFiber;
 try {
@@ -137,7 +148,14 @@ if (service === undefined || service === null) {
 }
 
 check("service.name === 'desktopProjectController'", service.name === "desktopProjectController", `got ${json(service.name)}`);
-info("routes registered during apply", `${registeredFetchRoutes.length} (${json(registeredFetchRoutes)}) — agentPresets 未提供，预期 0`);
+/* inject 回调由 cordis 异步触发：等到两条 preset 路由就位再断言。 */
+await new Promise((resolve) => setTimeout(resolve, 50));
+info("routes registered during apply", `${registeredFetchRoutes.length} (${json(registeredFetchRoutes)})`);
+check(
+	"both preset fetch routes registered once agentPresets exists",
+	registeredFetchRoutes.length === 2 && registeredFetchRoutes.includes("/api/agent-preset.export") && registeredFetchRoutes.includes("/api/agent-preset.import"),
+	json(registeredFetchRoutes)
+);
 
 /* ---------------------------------------------------------------- 4. Remote markers */
 const markers = remoteMethods(service);

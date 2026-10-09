@@ -589,8 +589,37 @@ if (!components.has("conversation.view")) {
 	if (!/已切换为只读预览/.test(clientSource)) fail("大文件只读时界面没有提示");
 	else pass("大文件只读时给出提示，并隐藏保存按钮");
 
-	if (!/readOnly: selected\.content\.length > EDITOR_READONLY_LIMIT/.test(clientSource)) fail("只读阈值没有真的接到 textarea 上");
-	else pass("只读阈值接在 textarea 的 readOnly 上");
+	if (!/const tooBig = selected\.status === "ready" && size > EDITOR_READONLY_LIMIT/.test(clientSource)) fail("只读阈值没有真的接到界面上");
+	else pass("只读阈值接在 tooBig 上（超过就不给点「编辑」）");
+}
+
+/* ---------------------- 13. 默认只读查看 + 一次复制全文（0.2.19） */
+
+/**
+ * 用户证据：Edge 154.0.4258.62 里在编辑区拖选，窗口变「（未响应）」；选中时弹出的是 Edge 的
+ * 划词迷你菜单。上游对得上号的是 Chromium 154 的 Blink>Editing>Selection 拖选死锁
+ * （issues.chromium.org/issues/568602800，构建 154.0.8037.97），浏览器侧的问题网页改不动，
+ * 只能少走那条路：默认只读 <pre>、「编辑」显式进入、外加「复制全文」绕开长距离拖选，
+ * 并把 Grammarly 一类的划词扩展挡在 textarea 外。
+ */
+{
+	if (!/const viewerStyle = Object\.assign\(\{\}, editorStyle, \{/.test(clientSource)) fail("没有只读查看区的样式 viewerStyle");
+	else pass("只读查看区有独立样式 viewerStyle（不从 preStyle 拼）");
+
+	if (!/h\("pre", \{ style: viewerStyle/.test(clientSource)) fail("默认态没有用只读 <pre> 显示内容（还是直接给 textarea）");
+	else pass("默认态是只读 <pre>：不点「编辑」就不进编辑控件那条路");
+
+	if (!/const editing = selected\.status === "ready" && selected\.editing === true && !tooBig/.test(clientSource)) fail("缺 editing 开关（查看态与编辑态没分开）");
+	else pass("查看 / 编辑两态由 editing 开关切换");
+
+	if (!/editing: false \}/.test(clientSource)) fail("open() 没有把新打开的文件设成查看态");
+	else pass("每次打开文件都回到查看态（editing: false）");
+
+	if (!/onClick: copyAll \}, "复制全文"\)/.test(clientSource)) fail("没有「复制全文」按钮（复制还得靠长距离拖选）");
+	else pass("「复制全文」按钮：整份内容一次进剪贴板");
+
+	if (!/data-enable-grammarly|data-gramm_editor/.test(clientSource)) fail("没有挡第三方划词扩展的属性（Grammarly 一类会往 textarea 挂浮层）");
+	else pass("textarea 上钉了 spellCheck / autoCorrect / data-gramm 一类属性");
 }
 
 /* ------------------------------------------------------------------- 输出 */

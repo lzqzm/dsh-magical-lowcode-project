@@ -287,6 +287,7 @@ PROJECT_NAME=功能验证项目
 | 脚本名输入框 | — | **默认值是 `source-page-push.js`**，placeholder `source-xxx.js`。⚠️ 想跑别的脚本必须手动改这一格 |
 | 参数输入框 | — | placeholder：`参数（空格分隔，可留空）`；按空白拆成数组传给脚本 |
 | **运行** | `projectRunScript(script, args, cwd)` | 见下 |
+| **运行前预检**（自动） | `projectResolveScript(script, cwd)` | 点运行前先由 host 定位脚本目录并检查那层 `.env` 的四个键；缺键就只显示提示、**不弹执行确认**（0.2.14 起，见 4.2） |
 
 执行的硬边界（host 侧）：
 
@@ -296,13 +297,31 @@ PROJECT_NAME=功能验证项目
 - 每次运行前会自动清理上次异常退出遗留的 `.temp_page_push_*` / `.temp_api_push_*` 目录；
 - 返回 `{ok, code, cmd, output}`。面板显示成 `成功（exit code 0）· <实际命令行>` 或 `失败（exit code N）· <实际命令行>`，下面用等宽区显示合并后的输出。
 
-### 4.2 案例 I：跑一次工程脚本
+### 4.2 运行前会先检查环境变量
+
+`source-*.js` 脚本靠 `utils.loadEnv()` 读**脚本所在那一层**的 `.env`。如果那层的 `.env` 没维护
+（本地新建的工作区尤其常见），脚本会一路跑到登录失败或找不到工程才报错，白等一趟。0.2.14 起，
+点「运行…」之前插了一步预检：
+
+1. 面板先调 `projectResolveScript(script, cwd)`，由 host 按 4.1 的规则找出脚本真正所在的那一层；
+2. host 读那层的 `.env`，看 `SERVER_URL` / `USERNAME` / `PASSWORD` / `PROJECT_UUID` 是否都非空；
+3. 有缺失 → 页签里显示「⚠ 环境变量未维护：`<脚本目录>\.env` 缺少 …」加一个**去维护环境变量**按钮，
+   **这一步不会弹执行确认、脚本也不会跑**；点按钮就地编辑这层 `.env`（只改这四个键，注释与其它键原样保留），
+   保存后再点运行即可；
+4. 四个键都在 → 照旧弹执行确认，然后执行。
+
+> 注意这里的 `.env` 是**脚本目录**那一份，和工具栏「环境配置」改的**工作区根** `.env`（只两键）不是同一个文件：
+> localdev 布局下脚本在 `localdev\`，工程目录在 `localdev\<projectUuid>\`，两份 `.env` 各管一摊。
+
+### 4.3 案例 I：跑一次工程脚本
 
 1. 路径填 `D:\project\PythonWorkSpace\AI学习\MagicalCoder平台插件话\.dsh-verify\proj`。
 2. **把脚本名那一格从默认的 `source-page-push.js` 改成 `source-hello.js`**（这个工程里只有这一个脚本，内容是 `console.log('hello from source script');`）。
 3. 参数留空，点**运行** → 预期 `成功（exit code 0）`，输出区出现 `hello from source script`。
 4. 反面案例：脚本名填一个**从传入目录一路到工作区根都没有**的名字（例如 `source-nope.js`）→ 报 `script-not-found`，错误里会写明应该把脚本放在哪个工作区根下。
 5. 再接一个反面案例：脚本名填 `../../evil.sh` → 被白名单挡下（`script-not-allowed`）。
+6. 环境变量反面案例：把脚本所在那层 `.env` 里的 `USERNAME` 删掉再点运行 → 不再弹执行确认，
+   页签里显示「⚠ 环境变量未维护」和**去维护环境变量**按钮；点按钮补回 `USERNAME` 保存，再点运行才继续。
 
 ---
 
@@ -362,6 +381,7 @@ PROJECT_NAME=功能验证项目
 | 故障样本页面 | `…\proj\pages\lint-demo` | 体检 8 条（6 error + 2 warn）；装配预览后打开是白页 |
 | 接口目录 | `…\proj\apis\getList` | 体检走接口分支 |
 | 工程脚本 | 路径 `…\proj` + 脚本名 `source-hello.js` | `成功（exit code 0）` + `hello from source script` |
+| 运行前预检 | 同上，但把 `…\proj\.env` 里的 `USERNAME` 删掉 | 不弹执行确认，页签里显示「⚠ 环境变量未维护」+ **去维护环境变量**（0.2.14） |
 
 你真正的工程（WMS 那套页面）在 `D:\project\PythonWorkSpace\AI学习\magicalcoder_ai\localdev` 下，但那个根**还没登记成工作区**，填了会报 `path-outside-workspace`；先在侧边栏「工作区」里点**添加工作区**选 `…\magicalcoder_ai\localdev` 即可。
 
@@ -377,6 +397,7 @@ PROJECT_NAME=功能验证项目
 | `not-a-page-or-api` | 体检时该目录既无 `page.json` 也无 `meta.json` | 把路径指到真正的页面目录或接口目录 |
 | `script-not-allowed` | 脚本名不在 `source-*.js` 白名单内 | 用工程自己的 `source-xxx.js` |
 | `script-not-found` | 从传入目录一路到工作区根都没有这个脚本（0.2.12 起错误里会写明应放的位置） | 把 `source-xxx.js` 放到工作区根，或放到路径框里填的那一层 |
+| 「⚠ 环境变量未维护」（不是报错，是**没执行**） | 脚本所在那层 `.env` 缺 `SERVER_URL` / `USERNAME` / `PASSWORD` / `PROJECT_UUID`（0.2.14） | 点提示里的**去维护环境变量**把这几个键补上再运行 |
 | 导入预设返回 409 | 已存在同名预设 | 换一个标识符再导 |
 | 导出预设返回 404 | 没有这个预设 id（0.2.0 起内置预设也能导出，旧的 403 分支已删除） | 用「设置 → Agent 预设」里看到的那串 id 再试 |
 | 「主机侧 RPC 不可用」 | 客户端拿不到 host 的 RPC 句柄 | 多半是 host 半边没加载成功（`dsh --profile <p> --dump-config` 里查有没有 `- id: dsh-magical-lowcode-project`） |

@@ -59,9 +59,14 @@ function check(label, actual, expected) {
 	console.log("  FAIL  " + label + "\n        期望 " + JSON.stringify(expected) + "\n        实际 " + JSON.stringify(actual));
 }
 
-const pieces = [extractFunction(source, "envValue"), extractFunction(source, "envUpsert")];
+const pieces = [
+	extractFunction(source, "envValue"),
+	extractFunction(source, "envUpsert"),
+	extractFunction(source, "envValues"),
+	extractFunction(source, "upsertEnvValues"),
+];
 if (pieces.some((piece) => piece === null)) {
-	console.log("  FAIL  没能在 lib/client.js 里定位 envValue / envUpsert（改名或删掉了？）");
+	console.log("  FAIL  没能在 lib/client.js 里定位 envValue / envUpsert / envValues / upsertEnvValues（改名或删掉了？）");
 	console.log("------------------------------------------------------------------------");
 	console.log("通过 0 · 失败 1");
 	process.exit(1);
@@ -69,8 +74,11 @@ if (pieces.some((piece) => piece === null)) {
 
 const sandbox = {};
 createContext(sandbox);
-runInContext(pieces.join("\n\n") + "\nthis.envValue = envValue;\nthis.envUpsert = envUpsert;\n", sandbox);
-const { envValue, envUpsert } = sandbox;
+runInContext(
+	pieces.join("\n\n") + "\nthis.envValue = envValue;\nthis.envUpsert = envUpsert;\nthis.envValues = envValues;\nthis.upsertEnvValues = upsertEnvValues;\n",
+	sandbox,
+);
+const { envValue, envUpsert, envValues, upsertEnvValues } = sandbox;
 
 console.log("--- envValue（读键）---");
 check("裸键值", envValue("SERVER_URL=https://a.example.com\n", "SERVER_URL"), "https://a.example.com");
@@ -103,6 +111,30 @@ const twice = envUpsert(envUpsert("A=1\n", "SERVER_URL", "https://a b"), "SERVER
 check("重复写入幂等", twice, 'A=1\nSERVER_URL="https://a b"\n');
 check("同一键只留一处", twice.split("\n").filter((line) => line.startsWith("SERVER_URL=")).length, 1);
 check("写回后可读回（引号往返）", envValue(envUpsert("", "SERVER_URL", "https://z/x y"), "SERVER_URL"), "https://z/x y");
+
+console.log("--- envValues / upsertEnvValues（脚本目录四键）---");
+check(
+	"envValues 一次取多个键，缺失键给空串",
+	JSON.stringify(envValues("SERVER_URL=https://a\nUSERNAME=admin\n", ["SERVER_URL", "USERNAME", "PASSWORD", "PROJECT_UUID"])),
+	JSON.stringify({ SERVER_URL: "https://a", USERNAME: "admin", PASSWORD: "", PROJECT_UUID: "" }),
+);
+check(
+	"upsertEnvValues 多键写回，注释与其它键原样保留",
+	upsertEnvValues("# 注释\nACCOUNT=admin\nSERVER_URL=https://old\n", {
+		SERVER_URL: "https://new",
+		USERNAME: "root",
+		PASSWORD: "p#1",
+		PROJECT_UUID: "abc",
+	}),
+	'# 注释\nACCOUNT=admin\nSERVER_URL=https://new\nUSERNAME=root\nPASSWORD="p#1"\nPROJECT_UUID=abc\n',
+);
+check("upsertEnvValues 空值写成空键（不删行）", upsertEnvValues("A=1\n", { USERNAME: "" }), "A=1\nUSERNAME=\n");
+check("upsertEnvValues 后可原样读回", envValue(upsertEnvValues("", { SERVER_URL: "https://x y" }), "SERVER_URL"), "https://x y");
+check(
+	"空文本 + 四个空值 = 四行空键（新建 .env 的形状）",
+	upsertEnvValues("", { SERVER_URL: "", USERNAME: "", PASSWORD: "", PROJECT_UUID: "" }),
+	"SERVER_URL=\nUSERNAME=\nPASSWORD=\nPROJECT_UUID=\n",
+);
 
 console.log("------------------------------------------------------------------------");
 if (failures.length > 0) {

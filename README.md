@@ -69,7 +69,10 @@ tab) share this one browser.
 - **Right · File content** — the editor for the selected file (save / saved / close); a browsing hint while nothing is selected
 - **Right · Preview & checkup** — the “in-tree lint” results land here (right-click a row and lint switches to this tab), followed by the sandbox preview (opens in a new tab) and the lint issue list
 - **Right · Push status** — see at a glance what changed but has not been pushed; mark pushed, reset, set a display project name
-- **Right · Project scripts** — run a `source-*.js` from the workspace root (six ready-made shortcuts) with arguments, echoing exit code, command and output
+- **Right · Project scripts** — run a `source-*.js` from the workspace root (six ready-made shortcuts) with arguments, echoing exit code, command and output;
+  before running, the host locates the script and pre-checks the four keys (`SERVER_URL` / `USERNAME` / `PASSWORD` / `PROJECT_UUID`)
+  in **that script folder's** `.env` — if any is missing the tab only shows a “environment variables not configured” notice plus
+  an inline editor, and the execution confirmation never appears
 - **Right · Preset packages** — export/import `.dshpreset`
 
 Both pull and push go through a **command-preview confirmation**: the exact `node source-*.js …` command is
@@ -79,7 +82,9 @@ ledger (the local files were just overwritten from the platform); a successful p
 The **environment config** dialog reads and writes `SERVER_URL` / `PROJECT_UUID` in the workspace root `.env`:
 a matching line is replaced in place (keeping its indent and `export ` prefix), otherwise the key is appended,
 while comments and every other line stay untouched; values containing whitespace or `#` are quoted. When the
-file does not exist yet, the dialog says that saving will create it.
+file does not exist yet, the dialog says that saving will create it. The script pre-check in the **Project scripts** tab
+edits the `.env` of the **script folder** instead (four keys, adding `USERNAME` / `PASSWORD`) — a different file from the
+workspace root `.env` (in the localdev layout the scripts sit one level above the project folder).
 
 Three entries share the same project browser: **Settings → Low-code project mode**, the **`▤` button at the
 bottom of the sidebar** (a floating copy), and a **“Low-code project” tab inside a session**

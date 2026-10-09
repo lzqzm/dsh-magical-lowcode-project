@@ -24,6 +24,7 @@ const EXPECTED_METHODS = [
 	"listProjectEntries",
 	"projectPushStatus",
 	"projectRunScript",
+	"projectResolveScript",
 	"projectMarkPushed",
 	"projectResetPushState",
 	"projectRenameEntry",
@@ -199,7 +200,7 @@ const descriptor = Object.getOwnPropertyDescriptor(prototype, DESCRIPTOR_KEY)?.v
 console.log("--- prototype descriptor ---");
 console.log(inspect(descriptor, { depth: 4, breakLength: 120 }));
 check(`prototype['${DESCRIPTOR_KEY}'] exists with version === 1`, descriptor?.version === 1, `got version=${json(descriptor?.version)}`);
-check("descriptor.methods is a frozen array of 12", Array.isArray(descriptor?.methods) && descriptor.methods.length === 12, `got length=${descriptor?.methods?.length}`);
+check(`descriptor.methods is a frozen array of ${EXPECTED_METHODS.length}`, Array.isArray(descriptor?.methods) && descriptor.methods.length === EXPECTED_METHODS.length, `got length=${descriptor?.methods?.length}`);
 check("descriptor is frozen", Object.isFrozen(descriptor) && Object.isFrozen(descriptor?.methods));
 
 /* ---------------------------------------------------------------- 5. typertRemote 绑定（namespace 来源） */
@@ -247,7 +248,7 @@ check("host fiber state after dispose === DISPOSED (4) or UNLOADING (5)", hostFi
 
 console.log("");
 if (failed === 0) {
-	console.log(`RESULT: PASS (${EXPECTED_METHODS.length}/12 Remote markers bound, namespace=desktopProject)`);
+	console.log(`RESULT: PASS (${EXPECTED_METHODS.length}/${EXPECTED_METHODS.length} Remote markers bound, namespace=desktopProject)`);
 	process.exit(0);
 }
 console.log(`RESULT: FAIL (${failed} failing check(s))`);

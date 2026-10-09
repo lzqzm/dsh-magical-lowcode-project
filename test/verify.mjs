@@ -205,6 +205,11 @@ else {
 	if (!hostSource.includes("insideWorkspace(") || !hostSource.includes("scriptDir")) fail("lib/index.js 的 projectRunScript 需支持从工程目录向上找到工作区根里的 source-*.js（0.2.12 修复推送 MODULE_NOT_FOUND）");
 	else pass("projectRunScript 支持向上解析脚本目录（工程目录 → 工作区根）");
 
+	// 运行前预检（0.2.14）：脚本所在目录的 .env 缺键时，面板必须能提前拦下。
+	if (!hostSource.includes("SCRIPT_ENV_KEYS") || !hostSource.includes("readEnvValue(") || !hostSource.includes("async projectResolveScript(")) {
+		fail("lib/index.js 缺少运行前环境变量预检（projectResolveScript / SCRIPT_ENV_KEYS / readEnvValue）");
+	} else pass("运行前预检：projectResolveScript 检查脚本目录 .env 的 SERVER_URL / USERNAME / PASSWORD / PROJECT_UUID");
+
 	// 12 个 remote 方法必须都在类里定义
 	const listMatch = hostSource.match(/for \(const remoteMethod of \[([\s\S]*?)\]\)/);
 	if (listMatch === null) fail("找不到 remoteMethod 注册循环");
@@ -383,7 +388,7 @@ else {
 			const called = [...clientSource.matchAll(/call\(\s*["']([A-Za-z0-9_]+)["']/g)].map((m) => m[1]);
 			const unreachable = hostMethods.filter((method) => !called.includes(method));
 			if (unreachable.length > 0) fail(`以下 RPC 在 host 侧注册、在客户端 descriptor 里声明，但面板从未调用（死功能）：${unreachable.join(", ")}`);
-			else pass(`12 个 RPC 全部在面板里可达`);
+			else pass(`${hostMethods.length} 个 RPC 全部在面板里可达`);
 
 			/*
 			 * 调用点的实参个数必须与 host 形参个数一致。

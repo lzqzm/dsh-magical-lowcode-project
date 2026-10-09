@@ -483,6 +483,35 @@ if (!components.has("conversation.view")) {
 	else pass("待推送状态标红（.dshml-dirty + statusTag）");
 }
 
+/* ------------------------------------------- 9. 运行前的环境变量预检（0.2.14） */
+
+/**
+ * 用户诉求：点「运行…」时如果环境变量没维护，先提示去维护，而不是让脚本白跑一趟。
+ * 钉住四件事：① 运行前先问 host 脚本落在哪一层、缺哪些键；② 缺键时只亮提示；
+ * ③ 提示里给出「去维护环境变量」入口；④ 那个入口编辑的是脚本目录 .env 的四个键。
+ */
+{
+	if (!/call\("projectResolveScript"/.test(clientSource)) fail("ScriptTab 运行前没有调用 projectResolveScript（无法提前发现环境变量缺失）");
+	else pass("点「运行…」先调 projectResolveScript 预检");
+
+	if (!/环境变量未维护/.test(clientSource)) fail("缺少「环境变量未维护」的提示文案");
+	else pass("缺键时提示「环境变量未维护」");
+
+	if (!/去维护环境变量/.test(clientSource)) fail("提示里没有「去维护环境变量」入口");
+	else pass("提示里给出「去维护环境变量」入口");
+
+	if (!/const SCRIPT_ENV_FIELDS = \[/.test(clientSource) || !/key: "USERNAME"/.test(clientSource) || !/key: "PASSWORD"/.test(clientSource)) {
+		fail("SCRIPT_ENV_FIELDS 未定义或缺少 USERNAME / PASSWORD");
+	} else pass("脚本目录 .env 的四个键有独立字段表 SCRIPT_ENV_FIELDS");
+
+	if (!/function EnvDialog\(\{ state, onChange, onSave, onClose, fields \}\)/.test(clientSource)) {
+		fail("EnvDialog 没有 fields 形参（脚本页签无法复用它编辑四键）");
+	} else pass("EnvDialog 支持 fields（工程目录两键 / 脚本目录四键共用）");
+
+	if (!/block\.missing\.join/.test(clientSource)) fail("预检返回的缺失键列表没有被渲染出来");
+	else pass("预检缺失键列表进入面板 state 并渲染成提示");
+}
+
 /* ------------------------------------------------------------------- 输出 */
 
 const line = "-".repeat(72);

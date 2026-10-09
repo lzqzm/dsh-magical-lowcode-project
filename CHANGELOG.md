@@ -3,6 +3,34 @@
 本文件只记面向使用者的变更。插件市场在「更新内容」处会展示版本说明或提交记录，
 所以每个版本都留一条。
 
+## 0.2.26
+
+用户反馈：「这边运行的时候获取的配置信息跟我环境变量里配置的不一一致」。查下来是**两份 .env 都在，
+面板改的是另一份**：
+
+- source-`*.js` 脚本用 `utils.loadEnv()` 读环境变量，而它是 `path.join(__dirname, '.env')` ——
+  读的是**脚本自己所在目录**的 `.env`。MagicalCoder 的 localdev 布局里脚本躺在工作区根
+  （`localdev\source-clone.js`），面板的「工程目录」却是它的子目录（`localdev\<uuid>`，那份 `.env`
+  归平台 runtime 用）。旧实现的面板「环境配置」写死 `<工程目录>\.env`，于是：用户在面板里改
+  `SERVER_URL` / `PROJECT_UUID`，运行脚本读的却是 `localdev\.env` 里那份旧值 —— 报「配置不一致」，
+  而且 `PROJECT_UUID` 不同还会让脚本作用在另一个工程上。
+- **加：`projectResolveEnv` RPC（host，第 15 个）** —— 从「工程目录」逐级向上找带 `source-*.js`
+  的那一层（复用 `locateScript` 的 `scriptCandidates` 越界保护），返回
+  `{ dir, scriptDir, envPath, envExists, envValues, projectEnvPath, projectEnvExists, projectValues, sameFile, missing }`
+  —— 即「脚本读的那份」与「工程目录那份」的路径和 `SERVER_URL` / `PROJECT_UUID` 值一起给出来。
+- **改：面板「环境配置」改的就是脚本读的那份** —— 打开时先问 `projectResolveEnv`，
+  写 `envPath`（认到脚本目录就编四个键 `SERVER_URL` / `USERNAME` / `PASSWORD` / `PROJECT_UUID`；
+  一个 `source-*.js` 都没找到才退回两个键的工程目录那套）。对话框里把两份文件的差异写成
+  ⚠ 提示：脚本读哪一份、两份的 `SERVER_URL` 各是什么、以及「脚本读到的 `PROJECT_UUID` 与工程目录名
+  不是同一个工程」这类会让人白跑一趟的情况。
+- **测试：** `test/verify.mjs` 43 → 45 项（`projectResolveEnv` 在 host 侧存在、面板走了它并渲染差异）、
+  `test/render-check.mjs` 133 → **138** 项（新增第 20 节：真渲染两份不一致的对话框，断言路径 /
+  两份 `SERVER_URL` / `PROJECT_UUID` 警告都在；`sameFile: true` 时不出现 ⚠）、
+  `test/smoke.mjs` 14 → **15/15** Remote 标记。
+
+> host 半边加了 RPC → **要重启 DSH** 才生效。重启后原来的面板对话框会指向脚本目录那份 `.env`；
+> 想换服务器地址 / 换工程就改那里（第一次打开时留意 ⚠ 提示里两份的差异）。
+
 ## 0.2.25
 
 用户一句话：「用编辑器打开的功能可以去掉了」。0.2.22 加的这条旁路（把文件递给 VS Code / 记事本 /

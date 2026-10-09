@@ -1173,6 +1173,65 @@ if (!components.has("conversation.view")) {
 	}
 }
 
+/* ------------- 20. 环境配置对齐「脚本真正读的那一份 .env」（0.2.26） */
+
+/**
+ * 用户诉求（m05342）：「这边运行的时候获取的配置信息跟我环境变量里配置的不一一致」——
+ * source-*.js 的 utils.loadEnv() 是 `path.join(__dirname, '.env')`，读的是**脚本所在目录**
+ * 那份 .env；而面板「工程目录」常常只是它的子目录（localdev\<uuid>，那份 .env 归平台
+ * runtime 用）。旧实现把面板对话框写死成 `<工程目录>\.env`，于是两份文件都在、谁也看不见
+ * 另一份。钉住：① 面板对话框先问 host projectResolveEnv 拿「脚本目录那份」；② 用脚本目录
+ * 的四个键；③ 两份不是同一个文件时把路径与 SERVER_URL / PROJECT_UUID 的差异渲染出来。
+ */
+{
+	if (!/call\("projectResolveEnv"/.test(clientSource)) fail("面板「环境配置」没有调用 projectResolveEnv（改的还是工程目录那份 .env）");
+	else pass("面板「环境配置」先调 projectResolveEnv 定位脚本目录那份 .env");
+
+	if (!/envDialog\.info\.scriptDir === null/.test(clientSource)) fail("envFields 没有按 scriptDir 是否存在切换字段表");
+	else pass("envFields：认到脚本目录 → 四个键（SERVER_URL / USERNAME / PASSWORD / PROJECT_UUID），否则退回两个键");
+
+	if (!/"hint-" \+ index/.test(clientSource)) fail("两份 .env 的差异没有渲染出来");
+	else pass("两份 .env 的差异渲染成 ⚠ 提示行（hint-N）");
+
+	const where = {
+		dir: "D:\\proj\\magicalcoder_ai\\localdev\\db18c478d6e04882a7b3847f6d5371b8",
+		scriptDir: "D:\\proj\\magicalcoder_ai\\localdev",
+		envPath: "D:\\proj\\magicalcoder_ai\\localdev\\.env",
+		envExists: true,
+		envValues: { SERVER_URL: "http://192.168.80.8:18080", PROJECT_UUID: "f5ac844869a141019c780dbbabba3dcc" },
+		projectEnvPath: "D:\\proj\\magicalcoder_ai\\localdev\\db18c478d6e04882a7b3847f6d5371b8\\.env",
+		projectEnvExists: true,
+		projectValues: { SERVER_URL: "http://111.1.189.38:18080", PROJECT_UUID: "db18c478d6e04882a7b3847f6d5371b8" },
+		sameFile: false,
+		missing: [],
+	};
+	const FILE = { status: "ready", path: "C:\\proj\\pages\\index.html", content: "line one", editing: false };
+	const dialogText = (info) => {
+		const tree = renderSettingsWith({ "TreeTab#4": FILE, "TreeTab#11": { status: "ready", path: where.envPath, content: "", values: {}, info: info } });
+		let modal = null;
+		walk(tree, (n) => {
+			if (modal === null && n.kind === "host" && n.name === primitivesStub.Modal) modal = n;
+		});
+		return { text: modal === null ? "" : textOf(modal), found: modal !== null };
+	};
+	try {
+		const split = dialogText(where);
+		if (!split.found) fail("两份 .env 不一致时环境配置对话框没渲染出来");
+		else if (!split.text.includes("localdev\\.env")) fail(`对话框没写出脚本读的那份路径：${JSON.stringify(split.text.slice(0, 160))}`);
+		else if (!split.text.includes("192.168.80.8") || !split.text.includes("111.1.189.38")) fail("两份 SERVER_URL 的差异没被写出来");
+		else if (!split.text.includes("不是同一个工程")) fail("脚本读到的 PROJECT_UUID 与工程目录名不一致时没有提示");
+		else if (!split.text.includes("USERNAME")) fail("改的是脚本目录那份，就该能编 USERNAME / PASSWORD");
+		else pass("两份 .env 不是同一个文件：写出脚本读的那份 + 两份 SERVER_URL 差异 + PROJECT_UUID 与工程目录不符的警告");
+
+		const same = dialogText(Object.assign({}, where, { sameFile: true, projectEnvPath: where.envPath, projectValues: where.envValues, dir: "" }));
+		if (!same.found) fail("同一份 .env 时对话框没渲染");
+		else if (same.text.includes("⚠")) fail("两份是同一个文件时不该出现 ⚠ 提示");
+		else pass("两份就是同一个文件时不出现 ⚠ 提示（普通工程目录不打扰）");
+	} catch (error) {
+		fail(`环境配置差异渲染抛错：${error?.message ?? error}`);
+	}
+}
+
 /* ------------------------------------------------------------------- 输出 */
 
 const line = "-".repeat(72);

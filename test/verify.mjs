@@ -210,6 +210,19 @@ else {
 		fail("lib/index.js 缺少运行前环境变量预检（projectResolveScript / SCRIPT_ENV_KEYS / readEnvValue）");
 	} else pass("运行前预检：projectResolveScript 检查脚本目录 .env 的 SERVER_URL / USERNAME / PASSWORD / PROJECT_UUID");
 
+	// 环境配置改哪一份 .env（0.2.26）：脚本的 utils.loadEnv() 是 `path.join(__dirname, '.env')`
+	// —— 读**脚本所在目录**那份；面板的「工程目录」往往只是它的子目录（localdev\<uuid>）。
+	// 面板原来写死 `<工程目录>\.env`，于是「运行取到的配置和面板里配的不一致」。
+	// projectResolveEnv 把脚本那层算出来，并连两份 .env 的值一起返回供 UI 摆差异。
+	if (
+		!hostSource.includes("async projectResolveEnv(") ||
+		!hostSource.includes("projectEnvPath") ||
+		!hostSource.includes("sameFile") ||
+		!hostSource.includes("scriptCandidates(")
+	) {
+		fail("lib/index.js 缺少 projectResolveEnv（脚本目录 .env 的定位 + 与工程目录那份的对比，0.2.26）");
+	} else pass("环境配置定位：projectResolveEnv 逐级向上找带 source-*.js 的目录 → envPath，并返回 projectEnvPath / sameFile / missing");
+
 	// 模糊查找（0.2.15）：树是按需加载的，没展开的层客户端根本没有数据，
 	// 所以递归搜索必须在 host 半边，打分函数也必须在 host 里（客户端只负责渲染）。
 	// 0.2.16 起条目得分单独抽成 scoreEntry：名字那一路的 +20 分只能加在命中项上。
@@ -273,6 +286,17 @@ else if (statSync(clientPath).size < 2000) fail(`lib/client.js 体积异常小�
 else {
 	const clientSource = readFileSync(clientPath, "utf8");
 	pass(`lib/client.js 存在（${statSync(clientPath).size} 字节）`);
+
+	// 环境配置对话框（0.2.26）：改「脚本目录那份 .env」——先问 host projectResolveEnv 拿
+	// envPath，再把两份 .env 的差异显示出来（hint-N）。以前写死 <工程目录>\.env。
+	if (
+		!clientSource.includes('call("projectResolveEnv"') ||
+		!clientSource.includes('"projectResolveEnv"') ||
+		!clientSource.includes("envFields") ||
+		!clientSource.includes('"hint-" + index')
+	) {
+		fail("lib/client.js 的环境配置对话框没走 projectResolveEnv / 不显示两份 .env 的差异（0.2.26）");
+	} else pass("环境配置对话框：改脚本目录那份 .env，并把两份路径与 SERVER_URL / PROJECT_UUID 差异摆出来（0.2.26）");
 
 	// 语法 + 「不是 ESM」双重校验：new Function 只解析不执行，
 	// 顶层 import/export 在函数体里必然是 SyntaxError，正好一并拦住。

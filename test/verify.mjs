@@ -298,6 +298,29 @@ else {
 		fail("lib/client.js 的环境配置对话框没走 projectResolveEnv / 不显示两份 .env 的差异（0.2.26）");
 	} else pass("环境配置对话框：改脚本目录那份 .env，并把两份路径与 SERVER_URL / PROJECT_UUID 差异摆出来（0.2.26）");
 
+	// host 侧统一（0.2.27）：推送状态的 PROJECT_UUID 与预览的 SERVER_URL 都改成走
+	// resolveEnvFile（= 脚本目录那层，也就是右上角「环境配置」改的那份），不再各读一份。
+	if (
+		!hostSource.includes("async resolveEnvFile(root, endpoint)") ||
+		!hostSource.includes('await this.resolveEnvFile(resolved, "desktopProject/projectPushStatus")') ||
+		!hostSource.includes('await this.resolveEnvFile(resolvedDir, "desktopProject/projectAssemblePreview")')
+	) {
+		fail("lib/index.js 里推送状态 / 预览没有统一走 resolveEnvFile（0.2.27）");
+	} else pass("host：projectPushStatus 与 projectAssemblePreview 都从 resolveEnvFile 取 .env（0.2.27）");
+
+	if (!hostSource.includes("projectUuidPath:") || !hostSource.includes("projectUuidDir:")) {
+		fail("projectPushStatus 未回带 projectUuidPath / projectUuidDir（两份 .env 不一致时 UI 无法提醒）");
+	} else if (hostSource.includes('readFile(join(resolved, ".env"), "utf8")') || hostSource.includes('readFile(join(owner.path, ".env"), "utf8")')) {
+		fail("lib/index.js 里仍有写死读「工程目录 / 工作区根」那份 .env 的地方（0.2.27 应统一）");
+	} else pass("推送状态回带 projectUuidPath / projectUuidDir，且旧的写死 .env 读法已清除");
+
+	// client 侧统一（0.2.27）：右键菜单里重复的「⚙ 修改环境配置」入口去掉，状态行说明
+	// PROJECT_UUID 来自环境配置那份，并在两份不一致时亮 ⚠。
+	if (clientSource.includes('label: "⚙ 修改环境配置"')) fail("lib/client.js 右键菜单里仍有「⚙ 修改环境配置」重复入口（0.2.27 应只留右上角那个）");
+	else if (!clientSource.includes("projectUuidDir") || !clientSource.includes("默认取「环境配置」那份 .env 的 PROJECT_UUID")) {
+		fail("lib/client.js 没有把 PROJECT_UUID 的来源说清楚（projectUuidDir / 环境配置提示语，0.2.27）");
+	} else pass("client：右键菜单的重复入口已去掉，PROJECT_UUID 标注来自「环境配置」并在不一致时亮 ⚠（0.2.27）");
+
 	// 语法 + 「不是 ESM」双重校验：new Function 只解析不执行，
 	// 顶层 import/export 在函数体里必然是 SyntaxError，正好一并拦住。
 	try {

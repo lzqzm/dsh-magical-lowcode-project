@@ -38,7 +38,7 @@
 | 页签 | 路径要的是哪一层 | 例 |
 | --- | --- | --- |
 | 项目树（左栏） | **工程目录**（任意一层都行，列它的一层子项） | `...\proj` 或 `...\proj\pages` |
-| 推送状态 | **工作区根**（下面要能扫到 `pages/` `apis/` `databases/`，并从此层 `.env` 读 `PROJECT_UUID`） | `...\proj` |
+| 推送状态 | **工作区根**（下面要能扫到 `pages/` `apis/` `databases/`，并从**环境配置**那份 `.env` 读 `PROJECT_UUID` —— 0.2.27 起与脚本同源） | `...\proj` |
 | 预览与体检 | **页面目录**（该层必须有 `page.json`） | `...\proj\pages\home` |
 | 工程脚本 | **工作区根**（脚本躺这一层；也可以传它下面的工程子目录 —— 0.2.12 起会自动逐级向上找到工作区根） | `...\proj` 或 `...\proj\<projectUuid>` |
 | 预设包 | 不是路径，是**预设标识符** | `my-agent` |
@@ -182,12 +182,13 @@ AI 自己按路径读整份文件，你不需要先「查看内容」把文件�
 | **关闭**（右栏） | — | 只收起右栏的编辑区，不写盘 |
 | **改名**（**右键**） | `projectRenameEntry(path, newName)` | 弹 `prompt` 要新名字；会同步改写该目录下 `page.json` / `meta.json` 里的 `name` 字段；Windows 上遇到 `EPERM`/`EBUSY` 会退避重试 |
 | **删除**（**右键**） | `projectDeleteEntry(path)` | 弹 `confirm`；目录会连内容一起删（提示里写明「目录（含其中全部内容）」）；**禁止删除工作区根** |
-| **环境配置**（**工具栏**） | `projectResolveEnv(dir)` → `projectReadFile(path)` → `projectWriteFile(path, content)` | 读写**脚本目录**那份 `.env`（0.2.26 起；逐级向上找带 `source-*.js` 的那层，认到就编 `SERVER_URL` / `USERNAME` / `PASSWORD` / `PROJECT_UUID` 四键，否则退回工程目录那份的两键）。两份不是同一个文件时把差异写成 ⚠ 提示（见 1.6） |
+| **环境配置**（**工具栏**） | `projectResolveEnv(dir)` → `projectReadFile(path)` → `projectWriteFile(path, content)` | 读写**脚本目录**那份 `.env`（0.2.26 起；逐级向上找带 `source-*.js` 的那层，认到就编 `SERVER_URL` / `USERNAME` / `PASSWORD` / `PROJECT_UUID` 四键，否则退回工程目录那份的两键）。两份不是同一个文件时把差异写成 ⚠ 提示（见 1.6）。**0.2.27 起这是唯一入口**（右键菜单那条已去掉），也是「推送状态」页签读 `PROJECT_UUID`、「体检与预览」读 `SERVER_URL` 的同一份文件 |
 
 #### 右键菜单（0.2.2）
 
 在任意行上**点右键**，会就地弹出菜单（上游 DSH Desktop `ProjectContextMenu` 的等价物）。
-它是上表动作的第二入口，**不适用的项灰显禁用而不是隐藏**，所以菜单位置固定、不会点错：
+它是上表动作的第二入口，**不适用的项灰显禁用而不是隐藏**，所以菜单位置固定、不会点错
+（菜单里的 **⚙ 修改环境配置** 在 0.2.27 去掉了：环境配置只留工具栏那一个入口）：
 
 | 菜单项 | 可用条件 | 行为 |
 | --- | --- | --- |
@@ -200,7 +201,6 @@ AI 自己按路径读整份文件，你不需要先「查看内容」把文件�
 | 🔍 推送前校验 | 目录行 | `projectLint(path)`，**自动切到右栏「体检与预览」页签**并把命中的问题（等级 / 文件:行 / 说明）列在那儿；没问题就提示「可以推送」 |
 | ⟳ 刷新 | 已填工程目录 | 同上表 **刷新** |
 | ⟳ 重扫推送状态 | 已填工程目录 | 同上表 **重扫推送状态** |
-| ⚙ 修改环境配置 | 已填工程目录 | 打开 `.env` 配置对话框（同工具栏 **环境配置**：先定位脚本目录那份，见 1.6） |
 | 📋 复制绝对路径 | 任意行 | 写进剪贴板 |
 | 📋 复制相对路径 | 该行在当前工程目录之下 | 相对当前工程目录的 `/` 分隔路径；不在其下则灰显 |
 | ✏ 改名 | 任意行 | 同上表 **改名** |
@@ -243,7 +243,8 @@ AI 自己按路径读整份文件，你不需要先「查看内容」把文件�
 
 ### 1.6 案例 G：改 `.env`（`SERVER_URL` / `PROJECT_UUID`）
 
-工具栏的**环境配置**按钮、右键菜单的 **⚙ 修改环境配置**，打开的是同一个对话框。
+**只有工具栏的「环境配置」这一个入口**（右键菜单里的 **⚙ 修改环境配置** 在 0.2.27 去掉了；
+「工程脚本」页签在缺变量时给的**去维护环境变量**按钮打开的是同一个文件、同一组键）。
 
 **0.2.26 起，它改的是「脚本真正读的那一份」`.env`** —— `source-*.js` 的 `utils.loadEnv()` 读的是
 **脚本所在目录**的 `.env`（`path.join(__dirname, '.env')`），而面板里的「工程目录」常常只是它的
@@ -272,7 +273,9 @@ AI 自己按路径读整份文件，你不需要先「查看内容」把文件�
 - 值里有空白或 `#` 时自动加双引号（`SERVER_URL="https://a b"`），避免被当成行尾注释。
 
 `SERVER_URL` 是各个 `source-*.js` 脚本读的平台地址，`PROJECT_UUID` 是「推送状态」页签
-判定项目归属用的那个键。这份纯逻辑由 `node test/env-check.mjs`（21 项）守着。
+判定项目归属用的那个键。**0.2.27 起，这两处以及「体检与预览」沙箱的 runtime 地址都取自
+这一份文件**（host 的 `resolveEnvFile`：推送状态与前缀取 `SERVER_URL` 时都先问它，
+不再各自写死读「工作区根 / 工程目录」那份）。这份纯逻辑由 `node test/env-check.mjs`（26 项）守着。
 
 ---
 
@@ -286,11 +289,11 @@ AI 自己按路径读整份文件，你不需要先「查看内容」把文件�
 | 控件 | 调用的 RPC | 行为 |
 | --- | --- | --- |
 | 路径输入框 | — | placeholder：`工作区绝对路径` |
-| **扫描** | `projectPushStatus(dir)` | 扫描 `pages/` `apis/` `databases/` 三区；以 `page.json` 的 `uuid` / `meta.json` 的 `id` 作为节点键；与上次记录的快照比对得出 `pushed` / `dirty`；同时从工作区根的 `.env` 读 `PROJECT_UUID`，并把 `.dsh-project-names.json` 里的显示名映射一并返回 |
+| **扫描** | `projectPushStatus(dir)` | 扫描 `pages/` `apis/` `databases/` 三区；以 `page.json` 的 `uuid` / `meta.json` 的 `id` 作为节点键；与上次记录的快照比对得出 `pushed` / `dirty`；同时从**环境配置**那份 `.env` 读 `PROJECT_UUID`（0.2.27 起走 `resolveEnvFile`，与脚本同源；两份不一致时另回带 `projectUuidDir` 让 UI 亮 ⚠），并把 `.dsh-project-names.json` 里的显示名映射一并返回 |
 | 节点上的 `scope` 标签 | — | `page` / `api` / `aggregate`（目录聚合节点） |
 | 节点上的状态标签 | — | `✔ 已推送` / `● 待推送` |
 | **标记已推送**（只对待推送节点出现） | `projectMarkPushed(workspacePath, relPath, scope, target)` | 把该节点当前所有文件的 mtime 记成新快照；会**连带更新祖先与子孙**节点的快照 |
-| **设置项目名** | `projectSetProjectName(workspacePath, uuid, name)` | 连弹两个 `prompt`：先「项目 UUID（32 位十六进制；默认取工作区 .env 的 PROJECT_UUID）」，再「显示用的项目名（清空则删除该条映射）」；只改 `.dsh-project-names.json`，**只影响显示** |
+| **设置项目名** | `projectSetProjectName(workspacePath, uuid, name)` | 连弹两个 `prompt`：先「项目 UUID（32 位十六进制；默认取「环境配置」那份 .env 的 PROJECT_UUID）」，再「显示用的项目名（清空则删除该条映射）」；只改 `.dsh-project-names.json`，**只影响显示** |
 | **重置记录** | `projectResetPushState()` | 清空**全部**推送状态（弹 `confirm`）；下次扫描所有节点都会变成待推送 |
 
 ### 2.2 案例 D：制造一次「待推送」再消掉
@@ -310,7 +313,8 @@ PROJECT_UUID=0123456789abcdef0123456789abcdef
 PROJECT_NAME=功能验证项目
 ```
 
-扫描结果里的 `PROJECT_UUID` 就是它。把 `.env` 里的值改掉再扫描，显示会跟着变——这条可以用来确认你扫的确实是那个工作区。
+扫描结果里的 `PROJECT_UUID` 就是它（0.2.27 起取的是**环境配置**那份 `.env`：逐级向上找到带
+`source-*.js` 的那层就用那层的 `.env`，找不到才用这里传进去的工程目录那份）。把 `.env` 里的值改掉再扫描，显示会跟着变——这条可以用来确认你扫的确实是那个工作区。如果这个目录下**另有一份** `.env` 写了不同的 `PROJECT_UUID`，状态行会额外亮一句 ⚠ 把那个值说出来。
 
 ---
 
@@ -421,8 +425,10 @@ PROJECT_NAME=功能验证项目
 > localdev 布局下脚本在 `localdev\`，工程目录在 `localdev\<projectUuid>\`，**两份 `.env` 各管一摊**：
 > 脚本读的是前者（`utils.loadEnv()` 是 `path.join(__dirname, '.env')`），`<projectUuid>\.env` 归平台 runtime 用。
 > 0.2.26 起工具栏「环境配置」改的**也是脚本目录那份**（先 `projectResolveEnv` 定位），两份值不一样会在
-> 对话框里给出 ⚠ 提示 —— 见 1.6 与 4.2。推送扫描（`projectPushStatus`）读的仍是它自己那层
-> `<工作区根>\.env` 的 `PROJECT_UUID`，那是另一条链路。
+> 对话框里给出 ⚠ 提示 —— 见 1.6 与 4.2。
+> **0.2.27 起两边完全同源**：推送扫描（`projectPushStatus`）的 `PROJECT_UUID`、「体检与预览」沙箱的
+> `SERVER_URL` 都由 host 的 `resolveEnvFile` 定位到同一份 `.env`（脚本目录那层，找不到才退回工程目录那份），
+> 也就是面板「环境配置」改的那份；两份 `PROJECT_UUID` 不一致时，状态行会额外亮一句 ⚠ 标出「该目录那份」的值。
 
 ### 4.3 案例 I：跑一次工程脚本
 
@@ -522,6 +528,7 @@ PROJECT_NAME=功能验证项目
 | 面板 UI 与按钮文案 | `lib/client.js`（`TreeTab` / `PushTab` / `PreviewTab` / `ScriptTab` / `PresetTab`；左右栏布局与 `BROWSER_CSS`、右栏页签表 `DETAIL_TABS`、面板外壳 `Panel` 都在文件末尾） |
 | 15 个 RPC 的实现与白名单/上限 | `lib/index.js`（`class DesktopProjectService`，方法清单见文件末尾的 `markRemote` 循环） |
 | 「环境配置」该改哪一份 `.env`（0.2.26） | `lib/index.js` 的 `projectResolveEnv`（共用 `scriptCandidates` 的逐级向上保护）+ `lib/client.js` 的 `openEnvDialog` / `EnvDialog`（四键 / 两键回落与 ⚠ 差异提示） |
+| 所有读 `.env` 的地方统一到「环境配置」那一份（0.2.27） | `lib/index.js` 的 `resolveEnvFile`（推送状态 `projectPushStatus` 与预览 `projectAssemblePreview` 都走它）+ `lib/client.js` 状态行里的 `projectUuidDir` ⚠（右键菜单那条「修改环境配置」入口已删） |
 | 「用编辑器打开」（0.2.22 加、0.2.25 已整条移除） | 不再存在：host 的 `resolveExternalEditor` / `openFileExternally` / `projectOpenExternal` 与 `DSHML_EDITOR` 环境变量、client 的三个入口都删掉了 |
 | 「引用到输入框」（把 `@路径` 插进对话输入框） | `lib/client.js` 的 `insertIntoComposer`（用会话 slot 的 `props.inputActions`）/ `mentionOf` / `referenceToComposer`；透传链 `ProjectView` → `Panel` → `TreeTab`（渲染桩检见 `test/render-check.mjs` 第 18 节） |
 | 体检规则 | `lib/index.js` 的 `projectLint` |

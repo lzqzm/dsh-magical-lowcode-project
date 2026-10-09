@@ -290,7 +290,7 @@ PROJECT_NAME=功能验证项目
 
 执行的硬边界（host 侧）：
 
-- 脚本名必须匹配白名单 `/^source-[a-z0-9-]+\.js$/`；脚本要**直接躺在某一层目录里**（放子目录里不会被找到）。查找从传入的 `cwd` 开始**逐级向上**，最远到该路径所属的**注册工作区根**为止 —— MagicalCoder 的 localdev 布局把 `source-*.js` 放在工作区根（`localdev\source-page-push.js`），而面板里的「工程目录」只是它下面的工程子目录（`localdev\<projectUuid>`），所以这种布局下脚本会被自动找到；从 `cwd` 一路找到工作区根都没有时，报 `script-not-found` 并提示应放的位置；
+- 脚本名必须匹配白名单 `/^source-[a-z0-9-]+\.js$/`；脚本要**直接躺在某一层目录里**（放子目录里不会被找到）。查找从传入的 `cwd` 开始**逐级向上**，最远到最外层的**已注册工作区**为止（每一级都必须还在某个已注册工作区内）—— MagicalCoder 的 localdev 布局把 `source-*.js` 放在工作区根（`localdev\source-page-push.js`），而面板里的「工程目录」只是它下面的工程子目录（`localdev\<projectUuid>`），所以这种布局下脚本会被自动找到；从 `cwd` 一路找到边界都没有时，报 `script-not-found` 并提示应放的位置；
 - 用**宿主自带的 node** 执行（`process.execPath`），`shell: false`，所以不依赖系统 PATH；
 - `stdout` 累计超过 400000 字符会被中止，最终输出截断到 20000 字符；
 - 每次运行前会自动清理上次异常退出遗留的 `.temp_page_push_*` / `.temp_api_push_*` 目录；

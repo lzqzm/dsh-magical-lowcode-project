@@ -613,7 +613,8 @@ if (!components.has("conversation.view")) {
  * 用户诉求：在「文件内容」里多选几次，有几率整个浏览器崩溃。可疑面逐个钉住：
  * ① 编辑区不再从 preStyle 继承一批给 <pre> 用的属性（maxHeight/overflow/wordBreak）；
  * ② 关掉可拖拽的 resize 手柄（浏览器在可 resize 的大 textarea 上反复拖选有崩溃记录）；
- * ③ 超大文本改成只读，别让受控 textarea 带着几百 KB 文本做选区重绘。
+ * ③ 编辑控件一次只装一页（0.2.21）：0.2.18/0.2.19 的「超大文件只读」只把路让开一半 ——
+ *    一点「编辑」仍会回到受控大 textarea；现在改成按行分页（EDITOR_PAGE_LINES 行一页）。
  */
 {
 	if (/style: Object\.assign\(\{\}, preStyle/.test(clientSource)) fail("编辑器还在拼 preStyle（给 <pre> 的 maxHeight / overflow / wordBreak 会跟着进 textarea）");
@@ -622,14 +623,14 @@ if (!components.has("conversation.view")) {
 	if (!/resize: "none"/.test(clientSource)) fail("编辑器仍带可拖拽的 resize 手柄（拖选崩溃的可疑点）");
 	else pass("编辑器关掉 resize 手柄（resize: none），高度只由样式决定");
 
-	if (!/const EDITOR_READONLY_LIMIT = \d+/.test(clientSource)) fail("没有大文件只读阈值（受控 textarea 扛不住超大文本的选区重绘）");
-	else pass("大文件只读阈值 EDITOR_READONLY_LIMIT");
+	if (!/const EDITOR_PAGE_LINES = [0-9]+/.test(clientSource)) fail("没有分页行数阈值（编辑控件又会一次装下整份文件）");
+	else pass("编辑控件分页阈值 EDITOR_PAGE_LINES（一次只装一页）");
 
-	if (!/已切换为只读预览/.test(clientSource)) fail("大文件只读时界面没有提示");
-	else pass("大文件只读时给出提示，并隐藏保存按钮");
+	if (/EDITOR_READONLY_LIMIT/.test(clientSource)) fail("还留着 EDITOR_READONLY_LIMIT —— 整份编辑那条路没拆干净");
+	else pass("整份只读阈值 EDITOR_READONLY_LIMIT 已拆掉（改成逐页渲染）");
 
-	if (!/const tooBig = selected\.status === "ready" && size > EDITOR_READONLY_LIMIT/.test(clientSource)) fail("只读阈值没有真的接到界面上");
-	else pass("只读阈值接在 tooBig 上（超过就不给点「编辑」）");
+	if (!/const sliceDrafts = \(lines, from, to\)/.test(clientSource)) fail("没有 sliceDrafts：行范围不会按页切开");
+	else pass("sliceDrafts 按 EDITOR_PAGE_LINES 把行范围切成一页一页");
 }
 
 /* ---------------------- 13. 默认只读查看 + 一次复制全文（0.2.19） */
@@ -648,11 +649,11 @@ if (!components.has("conversation.view")) {
 	if (!/h\("pre", \{ style: viewerStyle/.test(clientSource)) fail("默认态没有用只读 <pre> 显示内容（还是直接给 textarea）");
 	else pass("默认态是只读 <pre>：不点「编辑」就不进编辑控件那条路");
 
-	if (!/const editing = selected\.status === "ready" && selected\.editing === true && !tooBig/.test(clientSource)) fail("缺 editing 开关（查看态与编辑态没分开）");
-	else pass("查看 / 编辑两态由 editing 开关切换");
+	if (/const editing = selected\.status === "ready"/.test(clientSource)) fail("还留着「整份编辑」的 editing 开关（点编辑又会把整份文件塞进一个受控 textarea）");
+	else pass("没有「整份编辑」态：点「编辑」不再把整份文件塞进一个受控 textarea");
 
-	if (!/editing: false \}/.test(clientSource)) fail("open() 没有把新打开的文件设成查看态");
-	else pass("每次打开文件都回到查看态（editing: false）");
+	if (/const tooBig = selected\.status === "ready"/.test(clientSource)) fail("还留着 tooBig 整份只读分支（超长文件仍然只能只读看）");
+	else pass("没有 tooBig 整份只读分支（超长文件也能分页编辑）");
 
 	if (!/onClick: copyAll \}, "复制全文"\)/.test(clientSource)) fail("没有「复制全文」按钮（复制还得靠长距离拖选）");
 	else pass("「复制全文」按钮：整份内容一次进剪贴板");
@@ -755,7 +756,7 @@ if (!components.has("conversation.view")) {
 	else pass("savePatch 按行号把改后的内容拼回整份文本再写文件");
 
 	try {
-		const tree = renderSettingsWith({ "TreeTab#4": FILE, "TreeTab#14": { a: 0, b: 1 }, "TreeTab#15": { from: 0, to: 1, draft: "line one\nline two", saving: false } });
+		const tree = renderSettingsWith({ "TreeTab#4": FILE, "TreeTab#14": { a: 0, b: 1 }, "TreeTab#15": { from: 0, to: 1, drafts: ["line one\nline two"], page: 0, saving: false } });
 		const text = textOf(tree);
 		for (const label of ["替换这 2 行", "复制给 AI 改", "文件其余部分逐字保留"]) {
 			if (!text.includes(label)) fail(`「改这段」对话框里缺少「${label}」`);
@@ -775,6 +776,105 @@ if (!components.has("conversation.view")) {
 		else pass("「改这段」对话框里就是一个小 textarea（只装选中的行）");
 	} catch (error) {
 		fail(`「改这段」渲染抛错：${error?.message ?? error}`);
+	}
+}
+
+/* ------------- 15. 编辑改走分页：一个编辑控件只装一页（0.2.21） */
+
+/**
+ * 用户证据：Chrome 与 Edge 都是 154（同一个 Chromium 构建），点「编辑」后窗口标题变
+ * 「（无响应）」、编辑区里拖出一大片蓝底 —— 上游是 Blink>Editing>Selection 拖选死锁
+ * （issues.chromium.org/issues/568602800）。
+ * 0.2.20 只把**查看态**换成 user-select: none 的行级渲染；一点「编辑」又回到受控大 textarea
+ * （出事那份 index.html 有 90399 字符），于是原样踩死。0.2.21 把这条路拆掉：
+ * ① 任何编辑控件都不装整份文件 —— 按 EDITOR_PAGE_LINES 行分页，一次只渲染一页；
+ * ② 「改这段」（选中的几行）与「编辑」（整份）共用同一个分页编辑器 openRange；
+ * ③ 保存时把各页草稿按顺序拼回，替换原来的行范围，其余行逐字不动。
+ */
+{
+	if (!/const openRange = useCallback/.test(clientSource)) fail("没有 openRange（「编辑」与「改这段」共用的分页入口）");
+	else pass("openRange：「改这段」与「编辑」共用同一个分页编辑器");
+
+	if (!/onClick: \(\) => openRange\(0, lines\.length - 1\) \}, "编辑"\)/.test(clientSource)) fail("「编辑」没有接到分页编辑器（应写成 openRange(0, lines.length - 1)）");
+	else pass("「编辑」打开整份范围的分页编辑器（不是一个大 textarea）");
+
+	if (!/onPage: gotoPatchPage/.test(clientSource)) fail("PatchDialog 没接上翻页回调 onPage");
+	else pass("PatchDialog 接上 onPage（翻页只换页码，不动已经改好的草稿）");
+
+	if (!/drafts: sliceDrafts\(lines, start, end\)/.test(clientSource)) fail("openRange 没有把行范围切成页");
+	else pass("openRange 用 sliceDrafts 把选中的行范围切成页");
+
+	if (!/middle\.push\(line\)/.test(clientSource)) fail("savePatch 没有把各页草稿拼回整份文本");
+	else pass("savePatch 把各页草稿按顺序拼回，再替换原来的行范围");
+
+	/* 真渲染「2 页」的编辑态：控件里只该有当前那一页。 */
+	const PAGE_ONE = "line one\nline two";
+	const PAGE_TWO = "line three";
+	const BIGFILE = { status: "ready", path: "C:\\proj\\pages\\index.html", content: "line one\nline two\nline three\nline four" };
+	try {
+		const first = renderSettingsWith({
+			"TreeTab#4": BIGFILE,
+			"TreeTab#15": { from: 0, to: 3, drafts: [PAGE_ONE, PAGE_TWO], page: 0, saving: false },
+		});
+		const boxes = [];
+		walk(first, (n) => {
+			if (n.kind === "host" && n.name === "textarea") boxes.push(n);
+		});
+		const firstText = textOf(first);
+		if (boxes.length !== 1) fail(`多页编辑态应只有 1 个 textarea，实际 ${boxes.length} 个`);
+		else if (String(boxes[0].props?.value) !== PAGE_ONE) fail(`第 1 页时 textarea 装的不是第 1 页，实际「${String(boxes[0].props?.value)}」`);
+		else pass("分页编辑态：textarea 里只有当前这一页的文本");
+
+		for (const label of ["上一页", "下一页", "第 1/2 页"]) {
+			if (!firstText.includes(label)) fail(`多页编辑态缺少翻页元素「${label}」`);
+			else pass(`多页编辑态渲染出「${label}」`);
+		}
+
+		const second = renderSettingsWith({
+			"TreeTab#4": BIGFILE,
+			"TreeTab#15": { from: 0, to: 3, drafts: [PAGE_ONE, PAGE_TWO], page: 1, saving: false },
+		});
+		const secondBoxes = [];
+		walk(second, (n) => {
+			if (n.kind === "host" && n.name === "textarea") secondBoxes.push(n);
+		});
+		if (secondBoxes.length !== 1) fail(`翻到第 2 页后应仍是 1 个 textarea，实际 ${secondBoxes.length} 个`);
+		else if (String(secondBoxes[0].props?.value) !== PAGE_TWO) fail(`翻到第 2 页后 textarea 没换成第 2 页，实际「${String(secondBoxes[0].props?.value)}」`);
+		else if (!textOf(second).includes("第 2/2 页")) fail("翻到第 2 页后页码没更新");
+		else pass("翻页只换 textarea 里的那一页（第 2/2 页）");
+
+		if (!/total: lines\.length/.test(clientSource)) fail("openRange 没把总行数放进 state.total —— 分不清「编辑整份」与「改这段」");
+		else pass("openRange 带上 state.total，编辑整份与改这段共用入口但文案分得开");
+
+		/* 整份（点「编辑」）与「改这段」同一个对话框，标题/提示要分得开。 */
+		const titlesOf = (node) => {
+			const out = [];
+			walk(node, (n) => {
+				if (n.kind === "host" && n.name === primitivesStub.Modal) out.push(n.props?.title);
+			});
+			return out;
+		};
+
+		const wholeTree = renderSettingsWith({
+			"TreeTab#4": BIGFILE,
+			"TreeTab#15": { from: 0, to: 3, total: 4, drafts: [PAGE_ONE, PAGE_TWO], page: 0, saving: false },
+		});
+		const wholeTitles = titlesOf(wholeTree);
+		const wholeText = textOf(wholeTree);
+		if (!wholeTitles.includes("编辑整份 · 共 4 行（分页）")) fail(`整份编辑的标题应写「编辑整份 · 共 4 行（分页）」，实际 ${JSON.stringify(wholeTitles)}`);
+		else pass("整份编辑的标题写「编辑整份 · 共 4 行（分页）」");
+		if (!wholeText.includes("整份文件（共 4 行）")) fail("整份编辑的提示语没按整份口径说");
+		else if (wholeText.includes("文件其余部分逐字保留")) fail("整份编辑还在说「文件其余部分逐字保留」（这话只对「改这段」成立）");
+		else pass("整份编辑的提示语按整份口径说（不再提「其余部分逐字保留」）");
+
+		const rangeTree = renderSettingsWith({
+			"TreeTab#4": BIGFILE,
+			"TreeTab#15": { from: 0, to: 2, total: 4, drafts: ["line one\nline two\nline three"], page: 0, saving: false },
+		});
+		if (!titlesOf(rangeTree).includes("改这段 · 第 1–3 行")) fail(`只改一段时标题应仍是「改这段 · 第 1–3 行」，实际 ${JSON.stringify(titlesOf(rangeTree))}`);
+		else pass("只改一段时标题仍是「改这段 · 第 X–Y 行」（没被整份口径盖掉）");
+	} catch (error) {
+		fail(`分页编辑态渲染抛错：${error?.message ?? error}`);
 	}
 }
 

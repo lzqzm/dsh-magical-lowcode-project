@@ -356,6 +356,24 @@ else {
 	} else pass("「改这段」：选中的行单独进小文本框，保存按行号替换回原文件，其余逐字不动（0.2.20）");
 
 	/*
+	 * 分页编辑（0.2.21）：0.2.20 的「改这段」只覆盖选中的几行；点「编辑」仍旧把整份文件塞进
+	 * 一个受控大 textarea（用户那份 index.html 有 90399 字符），于是原样踩上同一条拖选死锁。
+	 * 现在任何编辑控件都只装一页（EDITOR_PAGE_LINES 行），「编辑」与「改这段」共用一个分页入口。
+	 */
+	if (
+		!clientSource.includes("EDITOR_PAGE_LINES") ||
+		!clientSource.includes("const sliceDrafts = (lines, from, to)") ||
+		!clientSource.includes("const openRange = useCallback") ||
+		!clientSource.includes("const gotoPatchPage = useCallback") ||
+		!clientSource.includes("total: lines.length") ||
+		!clientSource.includes("编辑整份") ||
+		clientSource.includes("EDITOR_READONLY_LIMIT") ||
+		clientSource.includes("selected.editing")
+	) {
+		fail("lib/client.js 缺少分页编辑（EDITOR_PAGE_LINES / sliceDrafts / openRange / gotoPatchPage / total+编辑整份），或仍留着整份编辑（EDITOR_READONLY_LIMIT / selected.editing）");
+	} else pass("分页编辑：任何编辑控件一次只装 EDITOR_PAGE_LINES 行，「编辑」与「改这段」共用 openRange，整份编辑那条路已拆除（0.2.21）");
+
+	/*
 	 * UI 基元契约回归锁。
 	 *
 	 * 这些值不是猜的：`@deepseek-ai/dsh-client-ui-primitives` 在本机**不是真实安装的包**

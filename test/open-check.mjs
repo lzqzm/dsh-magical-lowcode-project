@@ -84,7 +84,14 @@ if (pieces.some((piece) => piece === null)) {
 	process.exit(1);
 }
 
-const sandbox = { join, existsSync: () => false, process: { platform: "win32", env: {} } };
+/*
+ * 注入一个确定性的 join（Windows 反斜杠），而不用宿主 node:path 的那个：
+ * 否则同一条断言在 ubuntu runner 上会因为我们拼的是 `C:\a/b` 这种混合分隔符而对不上，
+ * 于是「CI 红了但本地全绿」。这里要测的是**挑哪个候选**，不是路径拼接本身。
+ */
+const winJoin = (...parts) => parts.filter((part) => part !== "" && part !== undefined).join("\\");
+
+const sandbox = { join: winJoin, existsSync: () => false, process: { platform: "win32", env: {} } };
 createContext(sandbox);
 runInContext(
 	'const EXTERNAL_EDITOR_ENV = "DSHML_EDITOR";\n' + pieces.join("\n\n") + "\nthis.resolveExternalEditor = resolveExternalEditor;\n",
@@ -106,11 +113,12 @@ const winEnv = (extra = {}) =>
 /** 只有列出来的路径算存在。 */
 const existsOnly = (paths) => (candidate) => paths.includes(candidate);
 
-const VSCODE = "C:\\Users\\me\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe";
-const VSCODE_INSIDERS = "C:\\Users\\me\\AppData\\Local\\Programs\\Microsoft VS Code Insiders\\Code - Insiders.exe";
-const VSCODE_PF = "C:\\Program Files\\Microsoft VS Code\\Code.exe";
-const NOTEPAD = "C:\\Windows\\System32\\notepad.exe";
-const EXPLORER = "C:\\Windows\\explorer.exe";
+const VSCODE = winJoin("C:\\Users\\me\\AppData\\Local", "Programs", "Microsoft VS Code", "Code.exe");
+const VSCODE_INSIDERS = winJoin("C:\\Users\\me\\AppData\\Local", "Programs", "Microsoft VS Code Insiders", "Code - Insiders.exe");
+const VSCODE_PF = winJoin("C:\\Program Files", "Microsoft VS Code", "Code.exe");
+const VSCODE_PF86 = winJoin("C:\\Program Files (x86)", "Microsoft VS Code", "Code.exe");
+const NOTEPAD = winJoin("C:\\Windows", "System32", "notepad.exe");
+const EXPLORER = winJoin("C:\\Windows", "explorer.exe");
 
 /* 1. DSHML_EDITOR：用户说了算，只要那个文件真的存在。 */
 check(
@@ -145,9 +153,9 @@ check(
 	resolveExternalEditor({
 		platform: "win32",
 		env: winEnv({ "ProgramFiles(x86)": "C:\\Program Files (x86)" }),
-		exists: existsOnly(["C:\\Program Files (x86)\\Microsoft VS Code\\Code.exe"]),
+		exists: existsOnly([VSCODE_PF86]),
 	}).command,
-	"C:\\Program Files (x86)\\Microsoft VS Code\\Code.exe",
+	VSCODE_PF86,
 );
 check(
 	"环境变量缺失时不崩，直接跳过该候选（LOCALAPPDATA 为空）",

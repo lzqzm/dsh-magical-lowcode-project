@@ -156,8 +156,10 @@ if (registration?.factory !== undefined) {
 }
 const SettingsSection = components.get("settings.section");
 const SidebarAction = components.get("sidebar.footer.action");
+const ProjectView = components.get("conversation.view");
 if (typeof SettingsSection !== "function") fail("没能从 settings.section 截获组件函数");
 if (typeof SidebarAction !== "function") fail("没能从 sidebar.footer.action 截获组件函数");
+if (typeof ProjectView !== "function") fail("没能从 conversation.view 截获组件函数");
 
 /* ------------------------------------------------------------------ 4. 渲染器 */
 
@@ -273,6 +275,25 @@ function renderSidebar() {
 	componentCallIndex = 0;
 	activeOverride = undefined;
 	return render(reactStub.createElement(SidebarAction, {}));
+}
+
+/**
+ * 渲染会话页签（conversation.view）并把宿主注入的 props 一起递进去（0.2.23）。
+ * 宿主会给会话作用域的 slot 组件塞 `inputActions`（captureInsertion / insertText / …），
+ * 这里就是把它接上，看「引用到输入框」到底有没有真写进输入框。
+ */
+function renderProjectView(props, overrides) {
+	useStateCallIndex = 0;
+	currentComponent = "";
+	componentCallIndex = 0;
+	activeOverride = "content";
+	stateOverrides = overrides;
+	try {
+		return render(reactStub.createElement(ProjectView, props ?? {}));
+	} finally {
+		activeOverride = undefined;
+		stateOverrides = undefined;
+	}
 }
 
 /* ------------------------------- 5. 设置页：工程浏览器（左树常驻 + 右栏五页签） */
@@ -921,10 +942,166 @@ if (!components.has("conversation.view")) {
 		});
 		if (modal === null) fail("编辑态没渲染出分页对话框");
 		else if (!textOf(modal).includes("用编辑器打开")) fail("分页对话框里没有「用编辑器打开」");
-		else if (!/min\(62vh, 640px\)/.test(clientSource)) fail("编辑区高度没有放大（仍是 min(40vh, 420px)）");
-		else pass("分页对话框里也能一键交给系统编辑器，且编辑区高度放大到 min(62vh, 640px)");
+		else if (!/min\(76vh, 820px\)/.test(clientSource)) fail("编辑区高度没有放大（0.2.23 起应为 min(76vh, 820px)）");
+		else pass("分页对话框里也能一键交给系统编辑器，且编辑区高度放大到 min(76vh, 820px)");
 	} catch (error) {
 		fail(`外部编辑器渲染抛错：${error?.message ?? error}`);
+	}
+}
+
+/* ------------- 17. 浏览器内编辑：双击改一行 + 页大小可选（0.2.23） */
+
+/**
+ * 用户（m04283）的结论：「这样子是用外部的编辑器打开了，没有在浏览器上的编辑器吗？」
+ * —— 「用编辑器打开」只是旁路，正解是浏览器内就能改，而且别再分页分到烦。
+ * 0.2.23 两条腿：
+ * ① 行内编辑：双击一行 → 该行变成单行 input，回车 / 失焦写回**这一行**。单行输入框里不可能
+ *    做长距离拖选，所以既没有「编辑区太大」的问题，也不会碰到 Blink 拖选死锁；
+ * ② 页大小可选：120 / 300 / 1000 / 整份，默认 120。分页从「唯一出路」降级成「保险」。
+ */
+{
+	if (!/const EDITOR_PAGE_SIZES = \[/.test(clientSource)) fail("没有 EDITOR_PAGE_SIZES（页大小不可选）");
+	else pass("页大小可选：EDITOR_PAGE_SIZES（120 / 300 / 1000 / 整份=0）");
+
+	if (!/const resliceDrafts = /.test(clientSource)) fail("没有 resliceDrafts（改页大小时草稿要按新页长重切）");
+	else pass("resliceDrafts：先拼回整段，再按新页长重切并折算页码");
+
+	if (!/const setPatchPageSize = useCallback/.test(clientSource)) fail("没有 setPatchPageSize 回调");
+	else pass("setPatchPageSize 接上「每页行数」按钮");
+
+	if (!/onPageSize: setPatchPageSize/.test(clientSource)) fail("PatchDialog 调用点没接上 onPageSize");
+	else pass("PatchDialog 调用点接上 onPageSize");
+
+	if (!/onPageSize\(0\)/.test(clientSource)) fail("没有「整份」这一档（整份=0）");
+	else pass("「整份」档位接上 onPageSize(0)");
+
+	if (!/const saveLineEdit = useCallback/.test(clientSource)) fail("没有 saveLineEdit（行内编辑改完写不回去）");
+	else pass("saveLineEdit：把改后的那一行替换回整份文本再 projectWriteFile");
+
+	if (!/className: "dshml-lineinput"/.test(clientSource)) fail("行内编辑没有渲染 input.dshml-lineinput");
+	else pass("行内编辑渲染单行 input.dshml-lineinput");
+
+	if (!/\.dshml-lineinput\{background:/.test(clientSource)) fail("行内输入框没有样式（看不出来在编辑）");
+	else pass("行内输入框有自己的样式（.dshml-lineinput）");
+
+	if (!/onDoubleClick: \(\) => setLineEdit/.test(clientSource)) fail("查看态那一行没有双击进入编辑");
+	else pass("双击一行 → setLineEdit，就地变成单行输入框");
+
+	if (!/"改这一行"/.test(clientSource)) fail("选中一行时没有「改这一行」按钮");
+	else pass("选中恰好一行时给出「改这一行」");
+
+	if (!/className: "dshml-editor"/.test(clientSource)) fail("编辑对话框没有加宽（className dshml-editor）");
+	else if (!/\.dshml-editor\{width:min\(94vw,1200px\)\}/.test(clientSource)) fail("编辑对话框没有近全屏的宽度规则");
+	else pass("编辑对话框近全屏：.dshml-editor{width:min(94vw,1200px)}");
+
+	const FILE = { status: "ready", path: "C:\\proj\\pages\\index.html", content: "line one\nline two" };
+	try {
+		/* ① 行内编辑：TreeTab 的第 16 个 state 就是 lineEdit（#14 sel、#15 patch 之后）。 */
+		const editTree = renderSettingsWith({
+			"TreeTab#4": FILE,
+			"TreeTab#16": { index: 1, draft: "line two!", saving: false },
+		});
+		const inputs = [];
+		walk(editTree, (n) => {
+			if (n.kind === "host" && n.name === "input" && n.props?.className === "dshml-lineinput") inputs.push(n);
+		});
+		if (inputs.length !== 1) fail(`行内编辑态应恰好 1 个 input.dshml-lineinput，实际 ${inputs.length} 个`);
+		else if (String(inputs[0].props?.value) !== "line two!") fail(`行内输入框没装第 2 行草稿，实际「${String(inputs[0].props?.value)}」`);
+		else pass("行内编辑态：第 2 行变成单行输入框，装着该行草稿");
+
+		/* ② 页大小那一行：四档都在，当前档用 primary。 */
+		const sizeTree = renderSettingsWith({
+			"TreeTab#4": FILE,
+			"TreeTab#15": { from: 0, to: 1, total: 2, drafts: ["line one\nline two"], page: 0, saving: false, pageSize: 1000 },
+		});
+		const sizeText = textOf(sizeTree);
+		if (!sizeText.includes("每页行数：")) fail("编辑对话框里没有「每页行数：」这一行");
+		else {
+			const missing = ["120 行", "300 行", "1000 行", "整份"].filter((label) => !sizeText.includes(label));
+			if (missing.length > 0) fail(`页大小档位缺 ${JSON.stringify(missing)}`);
+			else pass("页大小四档都渲染出来（120 行 / 300 行 / 1000 行 / 整份）");
+		}
+		if (!/min\(76vh, 820px\)/.test(clientSource)) fail("编辑区还是旧的 min(62vh, 640px)");
+		else pass("编辑区高度 min(76vh, 820px)（0.2.23 起近全屏）");
+	} catch (error) {
+		fail(`浏览器内编辑渲染抛错：${error?.message ?? error}`);
+	}
+}
+
+/* ------------- 18. 引用到输入框：会话作用域的 props.inputActions（0.2.23） */
+
+/**
+ * 用户（m04283）：「我需要在选择好文件后在 DeepSeek Harness 下面的输入框里引用对应的文件
+ * 让 ai 帮我改代码」。
+ *
+ * 「低代码工程」是 conversation.view（会话作用域 slot），宿主会把官方公开的 `InputActions`
+ * 当 props 递进来（@deepseek-ai/dsh-client-ui-conversation 的 contract/input.d.ts:200-226）。
+ * 插件只走这个面，不碰 conversation 包里注释写着「不得跨插件边界」的键盘面。
+ *
+ * 插的是纯文本 `@路径`：官方 @ 源的 codec 是恒等映射（serialize: (ref) => ref），
+ * 效果与真 chip 一致，而自造 chip 缺 owner 时会在发送阶段被拒并回滚草稿。
+ */
+{
+	if (!/const insertIntoComposer = useCallback/.test(clientSource)) fail("没有 insertIntoComposer（拿不到输入框就插不进去）");
+	else pass("insertIntoComposer：从 props.inputActions 取 captureInsertion / insertText");
+
+	if (!/const mentionOf = useCallback/.test(clientSource) || !/\\s\/\.test\(filePath\)/.test(clientSource)) fail("没有 mentionOf（含空格的路径要用 @\"…\" 语法）");
+	else pass("mentionOf：普通路径 `@路径`，含空格用 `@\"路径\"`");
+
+	if (!/inputActions: inputActions/.test(clientSource) || !/h\(Panel, \{ inputActions:/.test(clientSource)) fail("Panel / ProjectView 没有把 inputActions 透传到 TreeTab");
+	else pass("Panel / ProjectView 把宿主给的 inputActions 透传到 TreeTab");
+
+	if (!/onClick: \(\) => referenceToComposer\(selected\.path\)/.test(clientSource)) fail("工具行没有「引用到输入框」按钮");
+	else pass("工具行有「引用到输入框」");
+
+	if (!/label: "🤖 引用到输入框（让 AI 改）"/.test(clientSource)) fail("右键菜单没有「引用到输入框」");
+	else pass("右键菜单（文件与目录都能点）也有「引用到输入框」");
+
+	const FILE = { status: "ready", path: "C:\\proj\\pages\\index.html", content: "line one\nline two" };
+	const written = [];
+	const actions = {
+		captureInsertion: () => ({ start: 0, end: 0, draftRev: 7 }),
+		insertText: (text, span) => {
+			written.push({ text, span });
+			return true;
+		},
+		setDraft: () => {},
+		submit: () => {},
+	};
+	try {
+		const tree = renderProjectView({ inputActions: actions }, { "TreeTab#4": FILE });
+		const all = textOf(tree);
+		if (!all.includes("引用到输入框")) fail("查看态没渲染「引用到输入框」");
+		else if (all.indexOf("引用到输入框") > all.indexOf("用编辑器打开")) fail("「引用到输入框」应排在「用编辑器打开」之前（让 AI 改才是主路）");
+		else pass("查看态里「引用到输入框」排在「用编辑器打开」之前");
+
+		let button = null;
+		walk(tree, (n) => {
+			if (button === null && n.kind === "host" && n.name === primitivesStub.Button && textOf(n).includes("引用到输入框")) button = n;
+		});
+		if (button === null) fail("树里找不到「引用到输入框」按钮节点");
+		else {
+			await button.props.onClick();
+			if (written.length !== 1) fail(`点「引用到输入框」应往输入框写 1 次，实际 ${written.length} 次`);
+			else if (written[0].text !== "@C:\\proj\\pages\\index.html ") fail(`写进输入框的不是 @路径，而是「${written[0].text}」`);
+			else if (written[0].span?.draftRev !== 7) fail("insertText 没用 captureInsertion() 拿到的 span");
+			else pass("点「引用到输入框」→ inputActions.insertText(\"@绝对路径 \", captureInsertion())");
+		}
+
+		/* 设置页 / 侧栏浮层不在会话里：没有 inputActions 也不能抛错（退化成剪贴板）。 */
+		const bare = renderProjectView({}, { "TreeTab#4": FILE });
+		let bareButton = null;
+		walk(bare, (n) => {
+			if (bareButton === null && n.kind === "host" && n.name === primitivesStub.Button && textOf(n).includes("引用到输入框")) bareButton = n;
+		});
+		if (bareButton === null) fail("没有 inputActions 时「引用到输入框」不该消失");
+		else {
+			await bareButton.props.onClick();
+			if (written.length !== 1) fail("拿不到输入框时不该再往输入框写东西");
+			else pass("拿不到 inputActions（设置页 / 侧栏浮层）时不抛错，退化成剪贴板");
+		}
+	} catch (error) {
+		fail(`引用到输入框渲染抛错：${error?.message ?? error}`);
 	}
 }
 

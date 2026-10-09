@@ -394,6 +394,57 @@ else {
 	} else pass("用编辑器打开：host 按 DSHML_EDITOR→VS Code→记事本→文件管理器挑程序并 detached spawn，client 三个入口共用 projectOpenExternal（0.2.22）");
 
 	/*
+	 * 浏览器内编辑（0.2.23）：用户（m04283）说「怎么是用外部的编辑器打开了，没有在浏览器上的编辑器吗？」
+	 * —— 外部编辑器是旁路，不是正解。于是：
+	 * ① 行内编辑：双击一行 → 那一行变单行 input，回车 / 失焦写回**这一行**（单行框里做不了长距离
+	 *    拖选，既没有「编辑区太小」也没有 Blink 拖选死锁）；
+	 * ② 页大小可选：EDITOR_PAGE_SIZES = [120, 300, 1000]（0 = 整份），默认仍是 120 ——
+	 *    分页从「唯一出路」降级成「保险」，对话框同时加宽到 min(94vw,1200px)、编辑区 min(76vh,820px)。
+	 */
+	if (
+		!clientSource.includes("const EDITOR_PAGE_SIZES = [") ||
+		!clientSource.includes("const resliceDrafts = ") ||
+		!clientSource.includes("const setPatchPageSize = useCallback") ||
+		!clientSource.includes("onPageSize: setPatchPageSize") ||
+		!clientSource.includes("const saveLineEdit = useCallback") ||
+		!clientSource.includes('className: "dshml-lineinput"') ||
+		!clientSource.includes("onDoubleClick: () => setLineEdit") ||
+		!clientSource.includes('"改这一行"') ||
+		!clientSource.includes('className: "dshml-editor"')
+	) {
+		fail("lib/client.js 缺少浏览器内编辑（EDITOR_PAGE_SIZES / resliceDrafts / setPatchPageSize / onPageSize / saveLineEdit / dshml-lineinput / 双击行内编辑 / 改这一行 / dshml-editor）");
+	} else pass("浏览器内编辑：双击一行就地改（单行 input 写回那一行），页大小可选 120/300/1000/整份，对话框加宽近全屏（0.2.23）");
+
+	/*
+	 * 引用到输入框（0.2.23）：用户（m04283）说「我需要在选择好文件后在 DeepSeek Harness 下面的
+	 * 输入框里引用对应的文件让 ai 帮我改代码」。
+	 *
+	 * 走的是**公开面**：conversation.view 是会话作用域的 slot，宿主把 `InputActions`
+	 * （captureInsertion / insertText / setDraft / submit …）当 props 递进来
+	 * （@deepseek-ai/dsh-client-ui-conversation 的 contract/input.d.ts:200-226）。
+	 * conversation 包自己那套键盘面（ComposerKeyboard / InputHub.keyboard / ComposerBarInjected）
+	 * 注释里写明「不得跨插件边界」，一碰就依赖私有实现。
+	 *
+	 * 插的是纯文本 `@路径` 而不是自造 chip：官方 @ 源的 codec 是恒等映射
+	 * （dsh-client-ui-reference 的 `serialize: (ref) => ref`），chip 与 `@路径` 原文等价，
+	 * 而 chip owner 缺失会在发送时被拒并回滚草稿。插不进去（设置页 / 侧栏浮层不在会话里）时退回剪贴板。
+	 */
+	if (
+		!clientSource.includes("const insertIntoComposer = useCallback") ||
+		!clientSource.includes("actions.captureInsertion()") ||
+		!clientSource.includes("actions.insertText(text, actions.captureInsertion())") ||
+		!clientSource.includes("const mentionOf = useCallback") ||
+		!clientSource.includes("const referenceToComposer = useCallback") ||
+		!clientSource.includes("onClick: () => referenceToComposer(selected.path)") ||
+		!clientSource.includes("引用到输入框") ||
+		!clientSource.includes("refToComposer") ||
+		!clientSource.includes("inputActions: inputActions") ||
+		!clientSource.includes("h(Panel, { inputActions:")
+	) {
+		fail("lib/client.js 缺少「引用到输入框」（insertIntoComposer / captureInsertion / insertText / mentionOf / referenceToComposer / 三个入口 / inputActions 透传）");
+	} else pass("引用到输入框：会话作用域 slot 拿 props.inputActions 插 `@路径` 纯文本，工具行 / 右键菜单 / 选中区三处共用，拿不到输入框退回剪贴板（0.2.23）");
+
+	/*
 	 * UI 基元契约回归锁。
 	 *
 	 * 这些值不是猜的：`@deepseek-ai/dsh-client-ui-primitives` 在本机**不是真实安装的包**

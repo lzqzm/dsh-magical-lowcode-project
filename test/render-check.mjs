@@ -1181,7 +1181,10 @@ if (!components.has("conversation.view")) {
  * 那份 .env；而面板「工程目录」常常只是它的子目录（localdev\<uuid>，那份 .env 归平台
  * runtime 用）。旧实现把面板对话框写死成 `<工程目录>\.env`，于是两份文件都在、谁也看不见
  * 另一份。钉住：① 面板对话框先问 host projectResolveEnv 拿「脚本目录那份」；② 用脚本目录
- * 的四个键；③ 两份不是同一个文件时把路径与 SERVER_URL / PROJECT_UUID 的差异渲染出来。
+ * 的四个键。
+ * 0.2.28（m05969「现在只有这一个地方配置环境变量了」）：0.2.27 之后不必再解释「另一份」，
+ * 那两句比较文案删掉，只留一句「这一份就是脚本读的」+「工程目录名里的 uuid 与这里填的
+ * 项目 ID 不一致」的提醒（按**当前输入值**算，并给一键改成目录 ID 的按钮）。
  */
 {
 	if (!/call\("projectResolveEnv"/.test(clientSource)) fail("面板「环境配置」没有调用 projectResolveEnv（改的还是工程目录那份 .env）");
@@ -1190,8 +1193,9 @@ if (!components.has("conversation.view")) {
 	if (!/envDialog\.info\.scriptDir === null/.test(clientSource)) fail("envFields 没有按 scriptDir 是否存在切换字段表");
 	else pass("envFields：认到脚本目录 → 四个键（SERVER_URL / USERNAME / PASSWORD / PROJECT_UUID），否则退回两个键");
 
-	if (!/"hint-" \+ index/.test(clientSource)) fail("两份 .env 的差异没有渲染出来");
-	else pass("两份 .env 的差异渲染成 ⚠ 提示行（hint-N）");
+	if (clientSource.includes("是另一份") || clientSource.includes("两份的 SERVER_URL 不一样")) fail("环境配置对话框还在比较「另一份 .env」（0.2.28 起只有一处口径）");
+	else if (!/"hint-" \+ index/.test(clientSource)) fail("项目 ID 与工程目录不符的提醒没有渲染出来");
+	else pass("提示只剩一处口径：不再比较另一份 .env，只渲染「工程目录名 vs 项目 ID」的提醒（hint-N）");
 
 	const where = {
 		dir: "D:\\proj\\magicalcoder_ai\\localdev\\db18c478d6e04882a7b3847f6d5371b8",
@@ -1206,29 +1210,31 @@ if (!components.has("conversation.view")) {
 		missing: [],
 	};
 	const FILE = { status: "ready", path: "C:\\proj\\pages\\index.html", content: "line one", editing: false };
-	const dialogText = (info) => {
-		const tree = renderSettingsWith({ "TreeTab#4": FILE, "TreeTab#11": { status: "ready", path: where.envPath, content: "", values: {}, info: info } });
+	const dialogText = (info, values) => {
+		const tree = renderSettingsWith({ "TreeTab#4": FILE, "TreeTab#11": { status: "ready", path: where.envPath, content: "", values: values, info: info } });
 		let modal = null;
 		walk(tree, (n) => {
 			if (modal === null && n.kind === "host" && n.name === primitivesStub.Modal) modal = n;
 		});
 		return { text: modal === null ? "" : textOf(modal), found: modal !== null };
 	};
+	const DIR_UUID = "db18c478d6e04882a7b3847f6d5371b8";
 	try {
-		const split = dialogText(where);
-		if (!split.found) fail("两份 .env 不一致时环境配置对话框没渲染出来");
-		else if (!split.text.includes("localdev\\.env")) fail(`对话框没写出脚本读的那份路径：${JSON.stringify(split.text.slice(0, 160))}`);
-		else if (!split.text.includes("192.168.80.8") || !split.text.includes("111.1.189.38")) fail("两份 SERVER_URL 的差异没被写出来");
-		else if (!split.text.includes("不是同一个工程")) fail("脚本读到的 PROJECT_UUID 与工程目录名不一致时没有提示");
-		else if (!split.text.includes("USERNAME")) fail("改的是脚本目录那份，就该能编 USERNAME / PASSWORD");
-		else pass("两份 .env 不是同一个文件：写出脚本读的那份 + 两份 SERVER_URL 差异 + PROJECT_UUID 与工程目录不符的警告");
+		const mismatch = dialogText(where, { SERVER_URL: "http://192.168.80.8:18080", PROJECT_UUID: "f5ac844869a141019c780dbbabba3dcc" });
+		if (!mismatch.found) fail("环境配置对话框没渲染出来");
+		else if (!mismatch.text.includes("环境配置也只有这一个入口")) fail(`对话框没说清「只有这一处」：${JSON.stringify(mismatch.text.slice(0, 200))}`);
+		else if (mismatch.text.includes("是另一份") || mismatch.text.includes("两份的 SERVER_URL")) fail("对话框仍在比较「另一份 .env」");
+		else if (!mismatch.text.includes("f5ac844869a141019c780dbbabba3dcc") || !mismatch.text.includes(DIR_UUID)) fail("项目 ID 与工程目录名不一致时没把两个值都写出来");
+		else if (!mismatch.text.includes("改成工程目录的 ID")) fail("没有「一键改成工程目录 ID」的按钮");
+		else if (!mismatch.text.includes("USERNAME")) fail("改的是脚本目录那份，就该能编 USERNAME / PASSWORD");
+		else pass("按当前输入值提醒：工程目录 db18c478… 与项目 ID f5ac8448… 不一致，并把「改成工程目录的 ID」按钮摆出来（0.2.28）");
 
-		const same = dialogText(Object.assign({}, where, { sameFile: true, projectEnvPath: where.envPath, projectValues: where.envValues, dir: "" }));
-		if (!same.found) fail("同一份 .env 时对话框没渲染");
-		else if (same.text.includes("⚠")) fail("两份是同一个文件时不该出现 ⚠ 提示");
-		else pass("两份就是同一个文件时不出现 ⚠ 提示（普通工程目录不打扰）");
+		const aligned = dialogText(where, { PROJECT_UUID: DIR_UUID });
+		if (!aligned.found) fail("项目 ID 与工程目录名一致时对话框没渲染");
+		else if (aligned.text.includes("⚠")) fail("项目 ID 与工程目录名一致时不该出现 ⚠ 提示");
+		else pass("项目 ID 与工程目录名一致时不出现 ⚠（普通用法不打扰）");
 	} catch (error) {
-		fail(`环境配置差异渲染抛错：${error?.message ?? error}`);
+		fail(`环境配置提示渲染抛错：${error?.message ?? error}`);
 	}
 }
 

@@ -182,7 +182,7 @@ AI 自己按路径读整份文件，你不需要先「查看内容」把文件�
 | **关闭**（右栏） | — | 只收起右栏的编辑区，不写盘 |
 | **改名**（**右键**） | `projectRenameEntry(path, newName)` | 弹 `prompt` 要新名字；会同步改写该目录下 `page.json` / `meta.json` 里的 `name` 字段；Windows 上遇到 `EPERM`/`EBUSY` 会退避重试 |
 | **删除**（**右键**） | `projectDeleteEntry(path)` | 弹 `confirm`；目录会连内容一起删（提示里写明「目录（含其中全部内容）」）；**禁止删除工作区根** |
-| **环境配置**（**工具栏**） | `projectResolveEnv(dir)` → `projectReadFile(path)` → `projectWriteFile(path, content)` | 读写**脚本目录**那份 `.env`（0.2.26 起；逐级向上找带 `source-*.js` 的那层，认到就编 `SERVER_URL` / `USERNAME` / `PASSWORD` / `PROJECT_UUID` 四键，否则退回工程目录那份的两键）。两份不是同一个文件时把差异写成 ⚠ 提示（见 1.6）。**0.2.27 起这是唯一入口**（右键菜单那条已去掉），也是「推送状态」页签读 `PROJECT_UUID`、「体检与预览」读 `SERVER_URL` 的同一份文件 |
+| **环境配置**（**工具栏**） | `projectResolveEnv(dir)` → `projectReadFile(path)` → `projectWriteFile(path, content)` | 读写**脚本目录**那份 `.env`（0.2.26 起；逐级向上找带 `source-*.js` 的那层，认到就编 `SERVER_URL` / `USERNAME` / `PASSWORD` / `PROJECT_UUID` 四键，否则退回工程目录那份的两键）。**0.2.28 起不再把「另一份 `.env`」摆出来对比**：只说「这一份就是脚本读的」，填的 `PROJECT_UUID` 与工程目录名不是同一个工程时亮 ⚠ 并给一键改回（见 1.6）。**0.2.27 起这是唯一入口**（右键菜单那条已去掉），也是「推送状态」页签读 `PROJECT_UUID`、「体检与预览」读 `SERVER_URL` 的同一份文件 |
 
 #### 右键菜单（0.2.2）
 
@@ -259,9 +259,13 @@ AI 自己按路径读整份文件，你不需要先「查看内容」把文件�
      （`export KEY=` 前缀、单/双引号都认）；认到脚本目录就编这四个键，一个 `source-*.js` 都没找到
      才退回两个键（`SERVER_URL` / `PROJECT_UUID`）的工程目录那套；
    - 读不到（文件不存在，或目录不在已注册工作区内）就按「空 `.env`」打开，并提示**保存会新建一个**。
-4. **两份不是同一个文件时，对话框里会出现 ⚠ 提示**：脚本读的是哪一份、两份的 `SERVER_URL` 各是什么；
-   如果脚本那份的 `PROJECT_UUID` 和「工程目录」名字里的 uuid 不是同一个，还会点出来——那说明
-   「运行」会作用在另一个工程上（这正是 0.2.26 之前「运行取到的配置和面板里配的不一致」的来源）。
+4. 对话框里**只提醒一件事**（0.2.28 起）：开头一句说清「这一份就是 `source-*.js` 脚本读的 `.env` ——
+   运行、推送状态、体检与预览都读它，环境配置也只有这一个入口」；如果你在这里填的 `PROJECT_UUID` 和
+   「工程目录」名字里的 uuid 不是同一个，会亮一句 ⚠ 并给一个**改成工程目录的 ID** 按钮 —— 不一致
+   意味着「运行 / 推送」会作用在另一个工程上（这正是 0.2.26 之前「运行取到的配置和面板里配的不一致」
+   的来源）。提示按**当前输入框里的值**算，所以把 ID 改对的那一刻 ⚠ 就消失了。
+   （0.2.28 之前这里比较的是「工程目录那份 `.env`」：两份路径、两份 `SERVER_URL` 的差异 —— 既然
+   环境配置只剩这一个入口，比较那份文件只会让人困惑，那两句已删掉。）
 5. 改完点**保存** → 把键写回原文后整体 `projectWriteFile` 落盘；成功显示「已保存」。
 6. 想看结果，回项目树对那份 `.env` 点**查看**。
 
@@ -276,6 +280,8 @@ AI 自己按路径读整份文件，你不需要先「查看内容」把文件�
 判定项目归属用的那个键。**0.2.27 起，这两处以及「体检与预览」沙箱的 runtime 地址都取自
 这一份文件**（host 的 `resolveEnvFile`：推送状态与前缀取 `SERVER_URL` 时都先问它，
 不再各自写死读「工作区根 / 工程目录」那份）。这份纯逻辑由 `node test/env-check.mjs`（26 项）守着。
+**0.2.28 起对话框不再解释「另一份 `.env`」**：环境配置只有这一处，比较那个文件只会让人困惑，
+所以只有一句「这一份就是脚本读的」+ 项目 ID 与工程目录名不一致的提醒（按当前输入值算）。
 
 ---
 
@@ -424,8 +430,9 @@ PROJECT_NAME=功能验证项目
 
 > localdev 布局下脚本在 `localdev\`，工程目录在 `localdev\<projectUuid>\`，**两份 `.env` 各管一摊**：
 > 脚本读的是前者（`utils.loadEnv()` 是 `path.join(__dirname, '.env')`），`<projectUuid>\.env` 归平台 runtime 用。
-> 0.2.26 起工具栏「环境配置」改的**也是脚本目录那份**（先 `projectResolveEnv` 定位），两份值不一样会在
-> 对话框里给出 ⚠ 提示 —— 见 1.6 与 4.2。
+> 0.2.26 起工具栏「环境配置」改的**也是脚本目录那份**（先 `projectResolveEnv` 定位）；
+> **0.2.28 起对话框不再把「另一份」摆出来对比**（只有一个入口了），只在项目 ID 与工程目录名不是同一个
+> 工程时提醒 + 一键改回 —— 见 1.6 与 4.2。
 > **0.2.27 起两边完全同源**：推送扫描（`projectPushStatus`）的 `PROJECT_UUID`、「体检与预览」沙箱的
 > `SERVER_URL` 都由 host 的 `resolveEnvFile` 定位到同一份 `.env`（脚本目录那层，找不到才退回工程目录那份），
 > 也就是面板「环境配置」改的那份；两份 `PROJECT_UUID` 不一致时，状态行会额外亮一句 ⚠ 标出「该目录那份」的值。
@@ -527,7 +534,8 @@ PROJECT_NAME=功能验证项目
 | --- | --- |
 | 面板 UI 与按钮文案 | `lib/client.js`（`TreeTab` / `PushTab` / `PreviewTab` / `ScriptTab` / `PresetTab`；左右栏布局与 `BROWSER_CSS`、右栏页签表 `DETAIL_TABS`、面板外壳 `Panel` 都在文件末尾） |
 | 15 个 RPC 的实现与白名单/上限 | `lib/index.js`（`class DesktopProjectService`，方法清单见文件末尾的 `markRemote` 循环） |
-| 「环境配置」该改哪一份 `.env`（0.2.26） | `lib/index.js` 的 `projectResolveEnv`（共用 `scriptCandidates` 的逐级向上保护）+ `lib/client.js` 的 `openEnvDialog` / `EnvDialog`（四键 / 两键回落与 ⚠ 差异提示） |
+| 「环境配置」该改哪一份 `.env`（0.2.26） | `lib/index.js` 的 `projectResolveEnv`（共用 `scriptCandidates` 的逐级向上保护）+ `lib/client.js` 的 `openEnvDialog` / `EnvDialog`（四键 / 两键回落） |
+| 环境配置对话框不再比较「另一份 `.env`」，项目 ID 提醒按当前输入值算（0.2.28） | `lib/client.js` 的 `EnvDialog`（`notes` / `warnings` + `uuidInName` + 「改成工程目录的 ID」按钮） |
 | 所有读 `.env` 的地方统一到「环境配置」那一份（0.2.27） | `lib/index.js` 的 `resolveEnvFile`（推送状态 `projectPushStatus` 与预览 `projectAssemblePreview` 都走它）+ `lib/client.js` 状态行里的 `projectUuidDir` ⚠（右键菜单那条「修改环境配置」入口已删） |
 | 「用编辑器打开」（0.2.22 加、0.2.25 已整条移除） | 不再存在：host 的 `resolveExternalEditor` / `openFileExternally` / `projectOpenExternal` 与 `DSHML_EDITOR` 环境变量、client 的三个入口都删掉了 |
 | 「引用到输入框」（把 `@路径` 插进对话输入框） | `lib/client.js` 的 `insertIntoComposer`（用会话 slot 的 `props.inputActions`）/ `mentionOf` / `referenceToComposer`；透传链 `ProjectView` → `Panel` → `TreeTab`（渲染桩检见 `test/render-check.mjs` 第 18 节） |

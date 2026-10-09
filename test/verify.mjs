@@ -288,15 +288,29 @@ else {
 	pass(`lib/client.js 存在（${statSync(clientPath).size} 字节）`);
 
 	// 环境配置对话框（0.2.26）：改「脚本目录那份 .env」——先问 host projectResolveEnv 拿
-	// envPath，再把两份 .env 的差异显示出来（hint-N）。以前写死 <工程目录>\.env。
+	// envPath。以前写死 <工程目录>\.env。0.2.28 起不再比较「另一份 .env」（见下一段）。
 	if (
 		!clientSource.includes('call("projectResolveEnv"') ||
 		!clientSource.includes('"projectResolveEnv"') ||
 		!clientSource.includes("envFields") ||
 		!clientSource.includes('"hint-" + index')
 	) {
-		fail("lib/client.js 的环境配置对话框没走 projectResolveEnv / 不显示两份 .env 的差异（0.2.26）");
-	} else pass("环境配置对话框：改脚本目录那份 .env，并把两份路径与 SERVER_URL / PROJECT_UUID 差异摆出来（0.2.26）");
+		fail("lib/client.js 的环境配置对话框没走 projectResolveEnv / 不渲染项目 ID 提醒（0.2.26）");
+	} else pass("环境配置对话框：改脚本目录那份 .env，并按「工程目录名里的 uuid」提醒项目 ID（0.2.26）");
+
+	// 环境配置对话框的提示（0.2.28）：0.2.27 之后环境配置只有这一处，对话框不再比较「另一份
+	// .env」（m05969 的反馈：只剩一个入口了，那两句话该调整），只说这一份就是脚本读的那份；
+	// 项目 ID 与工程目录名不一致的提醒改成按**当前输入值**算（原来读的是打开时的文件快照，
+	// 于是输入框里已经是新值时提示还在说旧值），并给一个一键改成目录 ID 的按钮。
+	if (
+		clientSource.includes("是另一份") ||
+		clientSource.includes("两份的 SERVER_URL 不一样") ||
+		!clientSource.includes("环境配置也只有这一个入口") ||
+		!clientSource.includes("uuidInName") ||
+		!clientSource.includes('"改成工程目录的 ID"')
+	) {
+		fail("lib/client.js 环境配置对话框的提示没按「只有这一处」调整（0.2.28）");
+	} else pass("环境配置提示：只说这一份就是脚本读的那份，项目 ID 与工程目录不符时按当前输入值提醒并可一键改回（0.2.28）");
 
 	// host 侧统一（0.2.27）：推送状态的 PROJECT_UUID 与预览的 SERVER_URL 都改成走
 	// resolveEnvFile（= 脚本目录那层，也就是右上角「环境配置」改的那份），不再各读一份。

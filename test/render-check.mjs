@@ -942,8 +942,8 @@ if (!components.has("conversation.view")) {
 		});
 		if (modal === null) fail("编辑态没渲染出分页对话框");
 		else if (!textOf(modal).includes("用编辑器打开")) fail("分页对话框里没有「用编辑器打开」");
-		else if (!/min\(76vh, 820px\)/.test(clientSource)) fail("编辑区高度没有放大（0.2.23 起应为 min(76vh, 820px)）");
-		else pass("分页对话框里也能一键交给系统编辑器，且编辑区高度放大到 min(76vh, 820px)");
+		else if (!/编辑框大小：/.test(clientSource)) fail("分页对话框里没有「编辑框大小：」这一行");
+		else pass("分页对话框里也能一键交给系统编辑器，并给出「编辑框大小」三档（0.2.24）");
 	} catch (error) {
 		fail(`外部编辑器渲染抛错：${error?.message ?? error}`);
 	}
@@ -990,9 +990,9 @@ if (!components.has("conversation.view")) {
 	if (!/"改这一行"/.test(clientSource)) fail("选中一行时没有「改这一行」按钮");
 	else pass("选中恰好一行时给出「改这一行」");
 
-	if (!/className: "dshml-editor"/.test(clientSource)) fail("编辑对话框没有加宽（className dshml-editor）");
-	else if (!/\.dshml-editor\{width:min\(94vw,1200px\)\}/.test(clientSource)) fail("编辑对话框没有近全屏的宽度规则");
-	else pass("编辑对话框近全屏：.dshml-editor{width:min(94vw,1200px)}");
+	if (!/className: "dshml-editor " \+ "dshml-editor-|className: "dshml-editor dshml-editor-" \+ sizeKey/.test(clientSource)) fail("编辑对话框没有按档加 className（dshml-editor-<档>）");
+	else if (!/\.dshml-editor-" \+ key \+ "\{width:"/.test(clientSource)) fail("编辑对话框没有按档生成宽度规则");
+	else pass("编辑对话框宽度按档生成：.dshml-editor-<档>{width:…}（0.2.24）");
 
 	const FILE = { status: "ready", path: "C:\\proj\\pages\\index.html", content: "line one\nline two" };
 	try {
@@ -1021,8 +1021,8 @@ if (!components.has("conversation.view")) {
 			if (missing.length > 0) fail(`页大小档位缺 ${JSON.stringify(missing)}`);
 			else pass("页大小四档都渲染出来（120 行 / 300 行 / 1000 行 / 整份）");
 		}
-		if (!/min\(76vh, 820px\)/.test(clientSource)) fail("编辑区还是旧的 min(62vh, 640px)");
-		else pass("编辑区高度 min(76vh, 820px)（0.2.23 起近全屏）");
+		if (!/height: sizeStyle\.height/.test(clientSource)) fail("编辑区高度没有跟着尺寸档走（应为 height: sizeStyle.height）");
+		else pass("编辑区高度跟着尺寸档走（height: sizeStyle.height）");
 	} catch (error) {
 		fail(`浏览器内编辑渲染抛错：${error?.message ?? error}`);
 	}
@@ -1102,6 +1102,81 @@ if (!components.has("conversation.view")) {
 		}
 	} catch (error) {
 		fail(`引用到输入框渲染抛错：${error?.message ?? error}`);
+	}
+}
+
+/* ------------- 19. 编辑框尺寸三档：别再铺满屏幕（0.2.24） */
+
+/**
+ * 用户（m04851）在 0.2.23 截图下只说了一句：「编辑打开的内容太大了」。
+ *
+ * 0.2.23 刚把它做成近全屏（宽 min(94vw,1200px)、编辑区 min(76vh,820px)），而 0.2.17 又有人嫌
+ * 编辑区太矮 —— 同一条诉求其实是：**尺寸不该由插件钉死**。于是三档 compact / normal / wide，
+ * 默认 normal，选择记 localStorage；宽度按 className 生成，高度进 textarea 的内联 style。
+ */
+{
+	if (!/const EDITOR_SIZES = \{/.test(clientSource)) fail("没有 EDITOR_SIZES（编辑框尺寸不可选）");
+	else pass("编辑框尺寸三档：EDITOR_SIZES = { compact, normal, wide }");
+
+	if (!/const EDITOR_SIZE_ORDER = \["compact", "normal", "wide"\]/.test(clientSource)) fail("没有 EDITOR_SIZE_ORDER（档位顺序丢失）");
+	else pass("档位顺序 EDITOR_SIZE_ORDER = [compact, normal, wide]");
+
+	if (!/return EDITOR_SIZES\[raw\] === undefined \? "normal" : raw;/.test(clientSource)) fail("readStoredEditorSize 的默认档不是 normal");
+	else pass("readStoredEditorSize：坏值 / 没记过 → 默认「标准」（normal）");
+
+	if (!/const changeEditorSize = useCallback/.test(clientSource) || !/writeStored\(EDITOR_SIZE_KEY, next\)/.test(clientSource)) fail("没有 changeEditorSize（选了尺寸记不住）");
+	else pass("changeEditorSize：切档同时写进 localStorage");
+
+	const FILE = { status: "ready", path: "C:\\proj\\pages\\index.html", content: "line one\nline two" };
+	const PATCH = { from: 0, to: 1, total: 2, drafts: ["line one\nline two"], page: 0, saving: false, pageSize: 120 };
+	/** 渲染一次对话框，回传 { className, height, text }。 */
+	const dialog = (size) => {
+		const tree = renderSettingsWith({ "TreeTab#4": FILE, "TreeTab#15": PATCH, "TreeTab#17": size });
+		let modal = null;
+		let area = null;
+		walk(tree, (n) => {
+			if (modal === null && n.kind === "host" && n.name === primitivesStub.Modal) modal = n;
+			if (area === null && n.kind === "host" && n.name === "textarea") area = n;
+		});
+		return {
+			className: String(modal?.props?.className ?? ""),
+			height: String(area?.props?.style?.height ?? ""),
+			text: modal === null ? "" : textOf(modal),
+		};
+	};
+	try {
+		const normal = dialog(undefined);
+		if (!normal.className.includes("dshml-editor-normal")) fail(`默认档不是「标准」，className 是「${normal.className}」`);
+		else if (normal.height !== "min(58vh,560px)") fail(`默认档的编辑区高度是「${normal.height}」，应为 min(58vh,560px)`);
+		else pass("默认「标准」档：.dshml-editor-normal + 编辑区 min(58vh,560px)");
+
+		const compact = dialog("compact");
+		if (!compact.className.includes("dshml-editor-compact")) fail(`紧凑档 className 不对：「${compact.className}」`);
+		else if (compact.height !== "min(40vh,320px)") fail(`紧凑档编辑区高度是「${compact.height}」，应为 min(40vh,320px)`);
+		else pass("「紧凑」档：.dshml-editor-compact + 编辑区 min(40vh,320px)（右栏与左树不再被挡住）");
+
+		const wide = dialog("wide");
+		if (!wide.className.includes("dshml-editor-wide")) fail(`放大档 className 不对：「${wide.className}」`);
+		else if (wide.height !== "min(76vh,820px)") fail(`放大档编辑区高度是「${wide.height}」，应为 min(76vh,820px)`);
+		else pass("「放大」档：.dshml-editor-wide + 编辑区 min(76vh,820px)（0.2.23 的那一档还在）");
+
+		const labels = ["紧凑", "标准", "放大"];
+		const missing = labels.filter((label) => !normal.text.includes(label));
+		if (!normal.text.includes("编辑框大小：")) fail("对话框里没有「编辑框大小：」这一行");
+		else if (missing.length > 0) fail(`尺寸档位缺 ${JSON.stringify(missing)}`);
+		else pass("三个尺寸按钮都渲染出来（紧凑 / 标准 / 放大）");
+
+		/* 当前档必须是 primary，其余 default —— 否则看不出自己在哪一档。 */
+		const tiers = [];
+		walk(renderSettingsWith({ "TreeTab#4": FILE, "TreeTab#15": PATCH, "TreeTab#17": "compact" }), (n) => {
+			if (n.kind === "host" && n.name === primitivesStub.Button && labels.includes(textOf(n))) tiers.push({ label: textOf(n), variant: n.props?.variant });
+		});
+		const primary = tiers.filter((item) => item.variant === "primary").map((item) => item.label);
+		if (tiers.length !== 3) fail(`尺寸按钮应有 3 个，实际 ${tiers.length} 个`);
+		else if (primary.length !== 1 || primary[0] !== "紧凑") fail(`当前档没有唯一高亮：${JSON.stringify(primary)}`);
+		else pass("当前档唯一高亮（选了紧凑就只有「紧凑」是 primary）");
+	} catch (error) {
+		fail(`编辑框尺寸渲染抛错：${error?.message ?? error}`);
 	}
 }
 

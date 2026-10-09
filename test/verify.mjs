@@ -399,7 +399,7 @@ else {
 	 * ① 行内编辑：双击一行 → 那一行变单行 input，回车 / 失焦写回**这一行**（单行框里做不了长距离
 	 *    拖选，既没有「编辑区太小」也没有 Blink 拖选死锁）；
 	 * ② 页大小可选：EDITOR_PAGE_SIZES = [120, 300, 1000]（0 = 整份），默认仍是 120 ——
-	 *    分页从「唯一出路」降级成「保险」，对话框同时加宽到 min(94vw,1200px)、编辑区 min(76vh,820px)。
+	 *    分页从「唯一出路」降级成「保险」。
 	 */
 	if (
 		!clientSource.includes("const EDITOR_PAGE_SIZES = [") ||
@@ -410,10 +410,34 @@ else {
 		!clientSource.includes('className: "dshml-lineinput"') ||
 		!clientSource.includes("onDoubleClick: () => setLineEdit") ||
 		!clientSource.includes('"改这一行"') ||
-		!clientSource.includes('className: "dshml-editor"')
+		!clientSource.includes('className: "dshml-editor dshml-editor-" + sizeKey')
 	) {
 		fail("lib/client.js 缺少浏览器内编辑（EDITOR_PAGE_SIZES / resliceDrafts / setPatchPageSize / onPageSize / saveLineEdit / dshml-lineinput / 双击行内编辑 / 改这一行 / dshml-editor）");
-	} else pass("浏览器内编辑：双击一行就地改（单行 input 写回那一行），页大小可选 120/300/1000/整份，对话框加宽近全屏（0.2.23）");
+	} else pass("浏览器内编辑：双击一行就地改（单行 input 写回那一行），页大小可选 120/300/1000/整份（0.2.23）");
+
+	/*
+	 * 编辑框尺寸三档（0.2.24）：0.2.23 把它钉成近全屏（min(94vw,1200px) / min(76vh,820px)），
+	 * 用户（m04851）随即只说了一句「编辑打开的内容太大了」—— 尺寸不该由插件钉死。
+	 * 于是 EDITOR_SIZES = {compact, normal, wide}，默认 normal，选择记 localStorage。
+	 */
+	if (
+		!clientSource.includes("const EDITOR_SIZES = {") ||
+		!clientSource.includes('compact: { label: "紧凑"') ||
+		!clientSource.includes('normal: { label: "标准"') ||
+		!clientSource.includes('wide: { label: "放大"') ||
+		!clientSource.includes('const EDITOR_SIZE_ORDER = ["compact", "normal", "wide"]') ||
+		!clientSource.includes("const EDITOR_SIZE_KEY =") ||
+		!clientSource.includes("function readStoredEditorSize()") ||
+		!clientSource.includes("const EDITOR_DIALOG_CSS =") ||
+		!clientSource.includes("const [editorSize, setEditorSize] = useState(() => readStoredEditorSize())") ||
+		!clientSource.includes("const changeEditorSize = useCallback") ||
+		!clientSource.includes("size: editorSize") ||
+		!clientSource.includes("onSize: changeEditorSize") ||
+		!clientSource.includes('h("span", { className: "dshml-hint" }, "编辑框大小：")') ||
+		!clientSource.includes("{ height: sizeStyle.height }")
+	) {
+		fail("lib/client.js 缺少编辑框尺寸三档（EDITOR_SIZES / EDITOR_SIZE_ORDER / EDITOR_SIZE_KEY / readStoredEditorSize / EDITOR_DIALOG_CSS / editorSize / changeEditorSize / 编辑框大小 / sizeStyle.height）");
+	} else pass("编辑框尺寸三档：紧凑 / 标准 / 放大，默认「标准」并记进 localStorage，宽度走 className、高度进 textarea（0.2.24）");
 
 	/*
 	 * 引用到输入框（0.2.23）：用户（m04283）说「我需要在选择好文件后在 DeepSeek Harness 下面的

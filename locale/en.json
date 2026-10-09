@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Low-code Project Mode (dsh-magical-lowcode-project)",
-    "description": "Low-code project mode: browse a low-code project tree inside the workspace (right-click menu: view, copy content for the AI, push/pull, pre-push lint, rename, delete), inspect page/api push status, run source-*.js project scripts, assemble a page preview sandbox, lint before pushing, and import/export Agent preset packages (.dshpreset)."
+    "description": "Low-code project mode: browse a low-code project tree inside the workspace (right-click menu: view, copy content for the AI, push/pull, pre-push lint, edit environment config, rename, delete), edit SERVER_URL / PROJECT_UUID in the workspace root .env in place, inspect page/api push status, run source-*.js project scripts, assemble a page preview sandbox, lint before pushing, and import/export Agent preset packages (.dshpreset)."
   }
 }

@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "低代码工程模式 (dsh-magical-lowcode-project)",
-    "description": "低代码工程模式：在工作区里直接浏览低代码工程目录（支持右键菜单：查看、复制内容给 AI、推送/下拉、推送前校验、改名删除）、查看 page/api 推送状态、运行 source-*.js 工程脚本、装配页面预览沙箱、推送前跑静态校验，并支持 Agent 预设包 .dshpreset 的导入导出。"
+    "description": "低代码工程模式：在工作区里直接浏览低代码工程目录（支持右键菜单：查看、复制内容给 AI、推送/下拉、推送前校验、修改环境配置、改名删除）、就地改工作区根 .env 的 SERVER_URL / PROJECT_UUID、查看 page/api 推送状态、运行 source-*.js 工程脚本、装配页面预览沙箱、推送前跑静态校验，并支持 Agent 预设包 .dshpreset 的导入导出。"
   }
 }

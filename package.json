@@ -1,6 +1,6 @@
 {
   "name": "dsh-magical-lowcode-project",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "DeepSeek Harness 低代码工程模式插件：工作区项目文件树、推送状态(push status)、脚本运行、页面预览装配、推送前静态校验(lint) 的 host RPC，加插件自带 Web 面板与 Agent 预设包(.dshpreset)导入导出端点。Low-code project mode plugin for DeepSeek Harness.",
   "type": "module",
   "main": "lib/index.js",
@@ -98,11 +98,12 @@
     }
   },
   "scripts": {
-    "test": "node test/verify.mjs && node test/client-stub-check.mjs && node test/render-check.mjs && node test/preset-check.mjs",
+    "test": "node test/verify.mjs && node test/client-stub-check.mjs && node test/render-check.mjs && node test/preset-check.mjs && node test/env-check.mjs",
     "test:smoke": "node test/smoke.mjs",
     "test:client": "node test/client-stub-check.mjs",
     "test:render": "node test/render-check.mjs",
     "test:preset": "node test/preset-check.mjs",
-    "prepublishOnly": "node test/verify.mjs && node test/client-stub-check.mjs && node test/render-check.mjs && node test/preset-check.mjs"
+    "test:env": "node test/env-check.mjs",
+    "prepublishOnly": "node test/verify.mjs && node test/client-stub-check.mjs && node test/render-check.mjs && node test/preset-check.mjs && node test/env-check.mjs"
   }
 }

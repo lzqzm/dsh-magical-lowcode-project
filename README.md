@@ -54,7 +54,7 @@ Package limits: ≤16 MB compressed, ≤32 MB uncompressed, ≤12 MB per file, �
 
 A panel inside the DSH Web UI with five tabs:
 
-- **Project tree** — browse the project **multi-level** (click a directory to expand it; that level is fetched only then); every row carries an inline `● dirty` / `✔ pushed` mark, and dirty rows offer **↑ push** / **↓ pull** right there; **right-clicking** any row opens the full action menu (view content, copy content for the AI, pre-push lint, refresh, re-scan push status, copy absolute/relative path, rename, delete — inapplicable entries are greyed out instead of hidden); read, edit and save files in place, and give a 32-char UUID project directory a display name
+- **Project tree** — browse the project **multi-level** (click a directory to expand it; that level is fetched only then); every row carries an inline `● dirty` / `✔ pushed` mark, and dirty rows offer **↑ push** / **↓ pull** right there; **right-clicking** any row opens the full action menu (view content, copy content for the AI, pre-push lint, refresh, re-scan push status, edit environment config, copy absolute/relative path, rename, delete — inapplicable entries are greyed out instead of hidden); read, edit and save files in place, give a 32-char UUID project directory a display name, and edit the workspace root `.env` (`SERVER_URL` / `PROJECT_UUID`) straight from the toolbar
 - **Push status** — see at a glance what changed but has not been pushed; mark pushed, reset, set a display project name
 - **Preview & checkup** — assemble a sandbox preview (opens in a new tab), run the lint and list problems
 - **Project scripts** — run a `source-*.js` from the workspace root (six ready-made shortcuts) with arguments, echoing exit code, command and output
@@ -63,6 +63,11 @@ A panel inside the DSH Web UI with five tabs:
 Both pull and push go through a **command-preview confirmation**: the exact `node source-*.js …` command is
 shown first (pull carries an overwrite warning), and only then does it run. A successful pull clears the push
 ledger (the local files were just overwritten from the platform); a successful push marks that target as pushed.
+
+The **environment config** dialog reads and writes `SERVER_URL` / `PROJECT_UUID` in the workspace root `.env`:
+a matching line is replaced in place (keeping its indent and `export ` prefix), otherwise the key is appended,
+while comments and every other line stay untouched; values containing whitespace or `#` are quoted. When the
+file does not exist yet, the dialog says that saving will create it.
 
 Plus a sidebar shortcut (a floating copy of the same panel).
 

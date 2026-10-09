@@ -52,14 +52,25 @@ Package limits: ≤16 MB compressed, ≤32 MB uncompressed, ≤12 MB per file, �
 
 ### Web panel (client half)
 
-A panel inside the DSH Web UI with five tabs (shared by **three entries**: the settings section,
-the sidebar overlay, and a session tab):
+The DSH Web UI gets a **project browser**: a **persistent multi-level tree on the left**, a **detail area on
+the right** (five tabs: file content / preview & checkup / push status / project scripts / preset packages),
+and a shared path box plus toolbar on top. All **three entries** (settings section, sidebar overlay, session
+tab) share this one browser.
 
-- **Project tree** — browse the project **multi-level** (click a directory to expand it; that level is fetched only then); every row carries an inline `● dirty` / `✔ pushed` mark, and dirty rows offer **↑ push** / **↓ pull** right there; **right-clicking** any row opens the full action menu (view content, copy content for the AI, pre-push lint, refresh, re-scan push status, edit environment config, copy absolute/relative path, rename, delete — inapplicable entries are greyed out instead of hidden); read, edit and save files in place, give a 32-char UUID project directory a display name, and edit the workspace root `.env` (`SERVER_URL` / `PROJECT_UUID`) straight from the toolbar
-- **Push status** — see at a glance what changed but has not been pushed; mark pushed, reset, set a display project name
-- **Preview & checkup** — assemble a sandbox preview (opens in a new tab), run the lint and list problems
-- **Project scripts** — run a `source-*.js` from the workspace root (six ready-made shortcuts) with arguments, echoing exit code, command and output
-- **Preset packages** — export/import `.dshpreset`
+- **Left · Project tree** — browse the project **multi-level** (click a directory to expand it; that level is
+  fetched only then); every row carries an inline `● dirty` / `✔ pushed` mark; the row action buttons
+  (**↑ push** / **↓ pull** / **✏ project name** / **view** / **📋 copy path**) appear only while that row is
+  **hovered or selected**, so a resting row shows just the name and its status tag; **right-clicking** any row
+  opens the full action menu (view content, copy content for the AI, pre-push lint, refresh, re-scan push
+  status, edit environment config, copy absolute/relative path, rename, delete — inapplicable entries are
+  greyed out instead of hidden). Clicking a file name opens it in **the right pane's “File content” tab** for
+  editing and saving; a 32-char UUID project directory can be given a display name; the toolbar's
+  **environment config** edits the workspace root `.env` (`SERVER_URL` / `PROJECT_UUID`)
+- **Right · File content** — the editor for the selected file (save / saved / close); a browsing hint while nothing is selected
+- **Right · Preview & checkup** — the “in-tree lint” results land here (right-click a row and lint switches to this tab), followed by the sandbox preview (opens in a new tab) and the lint issue list
+- **Right · Push status** — see at a glance what changed but has not been pushed; mark pushed, reset, set a display project name
+- **Right · Project scripts** — run a `source-*.js` from the workspace root (six ready-made shortcuts) with arguments, echoing exit code, command and output
+- **Right · Preset packages** — export/import `.dshpreset`
 
 Both pull and push go through a **command-preview confirmation**: the exact `node source-*.js …` command is
 shown first (pull carries an overwrite warning), and only then does it run. A successful pull clears the push
@@ -70,7 +81,7 @@ a matching line is replaced in place (keeping its indent and `export ` prefix), 
 while comments and every other line stay untouched; values containing whitespace or `#` are quoted. When the
 file does not exist yet, the dialog says that saving will create it.
 
-Three entries share the same panel: **Settings → Low-code project mode**, the **`▤` button at the
+Three entries share the same project browser: **Settings → Low-code project mode**, the **`▤` button at the
 bottom of the sidebar** (a floating copy), and a **“Low-code project” tab inside a session**
 (`slot: conversation.view`, `order: 20`). The session tab is controlled by the **project-mode switch**
 at the top of the panel: it is on by default, turning it off removes the tab from sessions

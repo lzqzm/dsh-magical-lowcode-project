@@ -215,14 +215,18 @@ function renderSidebar() {
 	return render(reactStub.createElement(SidebarAction, {}));
 }
 
-/* ------------------------------------------------------ 5. 设置页：五个页签 */
+/* ------------------------------- 5. 设置页：工程浏览器（左树常驻 + 右栏五页签） */
 
+/**
+ * 右栏详情页签。顺序必须与 lib/client.js 的 `DETAIL_TABS` 一致；`render` 是
+ * 该页签应当渲染出来的组件名（左树 TreeTab 在任何页签下都常驻，单独断言）。
+ */
 const TABS = [
-	{ key: "tree", label: "项目树" },
-	{ key: "push", label: "推送状态" },
-	{ key: "preview", label: "预览与体检" },
-	{ key: "script", label: "工程脚本" },
-	{ key: "preset", label: "预设包" },
+	{ key: "content", label: "文件内容", render: "TreeTab" },
+	{ key: "preview", label: "体检与预览", render: "PreviewTab" },
+	{ key: "push", label: "推送状态", render: "PushTab" },
+	{ key: "script", label: "工程脚本", render: "ScriptTab" },
+	{ key: "preset", label: "预设包", render: "PresetTab" },
 ];
 /** 页签 Pill 的标签集合：脚本页签里还有一组快捷脚本 Pill，用标签把两组分开。 */
 const TAB_LABELS = new Set(TABS.map((t) => t.label));
@@ -233,7 +237,7 @@ if (typeof SettingsSection === "function") {
 		let tree;
 		try {
 			tree = renderSettings(tab.key);
-			if (tab.key === "tree") firstTree = tree;
+			if (tab.key === "content") firstTree = tree;
 		} catch (error) {
 			fail(`active="${tab.key}" 时渲染设置页抛错：${error?.message ?? error}`);
 			continue;
@@ -271,19 +275,18 @@ if (typeof SettingsSection === "function") {
 			else pass(`脚本页签渲染出 6 个快捷脚本入口（${quick.join("/")}）`);
 		}
 
-		/* 各页签至少要渲染出自己的内容，而不是空白。 */
+		/* 左树常驻，右栏渲染当前页签自己的组件，而不是空白。 */
 		const tabNodes = [];
 		walk(tree, (n) => {
 			if (n.kind === "component" && n.name !== "SettingsSection" && n.name !== "Panel") tabNodes.push(n.name);
 		});
 		if (tabNodes.length === 0) fail(`active="${tab.key}" 时没有任何页签组件被渲染`);
-		else if (tab.key === "tree") {
-			/* Panel 首屏应当渲染出 TreeTab 自己。 */
-			if (!tabNodes.includes("TreeTab")) fail(`默认页签应当渲染 TreeTab，实际渲染了 [${tabNodes.join(", ")}]`);
-		}
+		else if (!tabNodes.includes("TreeTab")) fail(`左树应当常驻渲染 TreeTab，实际渲染了 [${tabNodes.join(", ")}]`);
+		else if (!tabNodes.includes(tab.render)) fail(`active="${tab.key}" 时右栏应当渲染 ${tab.render}，实际渲染了 [${tabNodes.join(", ")}]`);
+		else pass(`active="${tab.key}" 时左树常驻 + 右栏渲染 ${tab.render}`);
 	}
 
-	/* 首屏默认落在「项目树」：不拨动 active 时应当与 active="tree" 一致。 */
+	/* 首屏默认落在「文件内容」：不拨动 detail 时左树 + 文件内容区应当都在。 */
 	if (firstTree !== null) {
 		let natural;
 		try {
@@ -299,7 +302,9 @@ if (typeof SettingsSection === "function") {
 				if (n.kind === "component") names.push(n.name);
 			});
 			if (!names.includes("TreeTab")) fail(`默认渲染没有出现 TreeTab（实际 [${names.join(", ")}]）`);
-			else pass("不拨动 active 时默认渲染 TreeTab（首屏与 active=\"tree\" 一致）");
+			else if (names.includes("PreviewTab") || names.includes("PushTab") || names.includes("ScriptTab") || names.includes("PresetTab")) {
+				fail(`默认右栏应当只渲染文件内容区，实际 [${names.join(", ")}]`);
+			} else pass("不拨动 detail 时默认渲染左树 + 文件内容区（首屏与 active=\"content\" 一致）");
 		}
 	}
 }
@@ -359,8 +364,8 @@ if (!components.has("conversation.view")) {
 			});
 			if (!names.includes("Panel")) fail("会话视图里没有渲染 Panel");
 			else pass("会话视图渲染出 Panel（与设置页共用同一个面板）");
-			if (!names.includes("TreeTab")) fail("会话视图首屏没有落在「项目树」页签");
-			else pass("会话视图首屏默认落在「项目树」页签");
+			if (!names.includes("TreeTab")) fail("会话视图首屏没有渲染出工程浏览器的左树");
+			else pass("会话视图首屏渲染出左树 + 文件内容区（默认页签）");
 			const texts = textOf(tree);
 			if (!texts.includes("工程模式：开")) fail(`会话视图没有渲染工程模式开关行（文本：${texts.slice(0, 80)}）`);
 			else pass("会话视图顶部渲染出「工程模式：开」开关行");

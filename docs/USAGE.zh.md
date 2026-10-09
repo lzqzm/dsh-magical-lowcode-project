@@ -98,7 +98,7 @@ host 半边**所有带路径的 RPC** 都会先做一次归属校验：路径必
 | **↓**（**行内**，只对目录） | `projectRunScript` → `projectResetPushState` | 按目录语义挑脚本（见 1.5）；确认后执行，成功后**清空全部推送状态记录**（本地文件已被线上覆盖） |
 | **✏**（**行内**，只对 32 位 UUID 目录） | `projectSetProjectName(workspacePath, uuid, name)` | 弹 `prompt` 要显示名（清空则删掉映射）；只改 `.dsh-project-names.json`，**不动物理目录名** |
 | **📋**（**行内**） | — | 写进剪贴板；剪贴板不可用时把路径显示在提示行里 |
-| **查看**（**行内**，只对文件） | `projectReadFile(path)` | 读 UTF-8，单文件上限 2MB；内容出现在**右栏「文件内容」**页签，是**可编辑**的文本域 |
+| **查看**（**行内**，只对文件） | `projectReadFile(path)` | 读 UTF-8，单文件上限 2MB；内容出现在**右栏「文件内容」**页签，是**可编辑**的文本域；编辑区高度跟窗口走（`min(62vh, 760px)`，0.2.17 起），右下角还能手动往下拉 |
 | **保存**（右栏） | `projectWriteFile(path, content)` | 直接写回（UTF-8，**无备份、无二次确认**）；成功后原地出现「已保存」 |
 | **关闭**（右栏） | — | 只收起右栏的编辑区，不写盘 |
 | **改名**（**右键**） | `projectRenameEntry(path, newName)` | 弹 `prompt` 要新名字；会同步改写该目录下 `page.json` / `meta.json` 里的 `name` 字段；Windows 上遇到 `EPERM`/`EBUSY` 会退避重试 |

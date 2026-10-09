@@ -544,6 +544,30 @@ if (!components.has("conversation.view")) {
 	else pass("查找条与结果路径有独立样式（.dshml-find / .dshml-hitpath）");
 }
 
+/* --------------------------------- 11. 右栏编辑器高度（0.2.17） */
+
+/**
+ * 用户诉求：「文件内容」这边显示区域的高度不够。编辑器沿用了 preStyle，而它带
+ * maxHeight 320 —— 宽屏下右栏一大半是空白。钉住：编辑器把 maxHeight 解开、高度跟窗口走、
+ * 还能手动往下拉；左右两栏的上限也一起放宽（否则 pane 会把编辑器裁掉再套一层滚动）。
+ */
+{
+	if (!/maxHeight: "none"/.test(clientSource)) fail("文件内容编辑器仍被 preStyle 的 maxHeight 320 压住（高度只有一屏的零头）");
+	else pass("编辑器解开 preStyle 的 maxHeight：高度跟窗口走");
+
+	if (!/height: "min\(62vh, 760px\)"/.test(clientSource)) fail("编辑器没有给随窗口变化的高度");
+	else pass("编辑器高度 min(62vh, 760px)，宽屏下不再是一条缝");
+
+	if (!/resize: "vertical"/.test(clientSource)) fail("编辑器不能手动往下拉");
+	else pass("编辑器可手动下拉（resize: vertical）");
+
+	if (!/\.dshml-pane\{[^}]*max-height:min\(82vh,1000px\)/.test(clientSource)) fail("右栏容器 .dshml-pane 的上限太小，会把编辑器裁掉");
+	else pass("右栏容器上限放宽到 min(82vh, 1000px)");
+
+	if (!/\.dshml-tree\{[^}]*max-height:min\(80vh,900px\)/.test(clientSource)) fail("左树上限没跟着放宽（左右两栏高度差太明显）");
+	else pass("左树上限同步放宽到 min(80vh, 900px)");
+}
+
 /* ------------------------------------------------------------------- 输出 */
 
 const line = "-".repeat(72);

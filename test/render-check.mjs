@@ -77,6 +77,7 @@ const reactStub = {
 	},
 	useCallback: (fn) => fn,
 	useRef: (initial) => ({ current: initial === undefined ? null : initial }),
+	useEffect: () => {},
 	Fragment: Symbol("Fragment"),
 };
 const primitivesStub = { Button: "UI.Button", Input: "UI.Input", Modal: "UI.Modal", Pill: "UI.Pill", Tag: "UI.Tag" };

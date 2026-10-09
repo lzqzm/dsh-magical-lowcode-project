@@ -70,6 +70,7 @@ const reactStub = {
 	useState: (initial) => [typeof initial === "function" ? initial() : initial, () => {}],
 	useCallback: (fn) => fn,
 	useRef: (initial) => ({ current: initial === undefined ? null : initial }),
+	useEffect: () => {},
 	Fragment: Symbol("Fragment"),
 };
 const primitivesStub = {

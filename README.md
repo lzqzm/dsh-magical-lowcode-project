@@ -54,7 +54,7 @@ Package limits: ≤16 MB compressed, ≤32 MB uncompressed, ≤12 MB per file, �
 
 A panel inside the DSH Web UI with five tabs:
 
-- **Project tree** — browse the project **multi-level** (click a directory to expand it; that level is fetched only then); every row carries an inline `● dirty` / `✔ pushed` mark, and dirty rows offer **↑ push** / **↓ pull** right there; read, edit and save files in place, rename/delete/copy paths, and give a 32-char UUID project directory a display name
+- **Project tree** — browse the project **multi-level** (click a directory to expand it; that level is fetched only then); every row carries an inline `● dirty` / `✔ pushed` mark, and dirty rows offer **↑ push** / **↓ pull** right there; **right-clicking** any row opens the full action menu (view content, copy content for the AI, pre-push lint, refresh, re-scan push status, copy absolute/relative path, rename, delete — inapplicable entries are greyed out instead of hidden); read, edit and save files in place, and give a 32-char UUID project directory a display name
 - **Push status** — see at a glance what changed but has not been pushed; mark pushed, reset, set a display project name
 - **Preview & checkup** — assemble a sandbox preview (opens in a new tab), run the lint and list problems
 - **Project scripts** — run a `source-*.js` from the workspace root (six ready-made shortcuts) with arguments, echoing exit code, command and output

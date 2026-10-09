@@ -460,6 +460,25 @@ if (!components.has("conversation.view")) {
 	}
 }
 
+/* ------------------------------------------------- 7. 面板样式表的布局陷阱 */
+
+/**
+ * 0.2.8 用 `flex: 1 1 480px` 让输入框吃掉剩余宽度，结果在纵向容器（gridStyle 那一类）里
+ * 被当成高度基准，把环境配置弹窗的标签与输入框拉得极开。这里把「横向撑开」与「纵向字段」
+ * 两套规则钉住，避免再犯。
+ */
+{
+	const grow = /\.dshml-grow\{([^}]*)\}/.exec(clientSource);
+	if (grow === null) fail("样式表里没有 .dshml-grow 规则");
+	else if (/flex:1 1 480px/.test(grow[1])) fail(".dshml-grow 仍带 flex-basis 480px（在纵向容器里会撑高整行）");
+	else if (!/flex:1 1 auto/.test(grow[1])) fail(`.dshml-grow 的 flex 简写不是 1 1 auto（实际 ${JSON.stringify(grow[1])}）`);
+	else pass(".dshml-grow 用 flex:1 1 auto（横向撑开、纵向不撑高）");
+
+	if (!/\.dshml-field\{/.test(clientSource)) fail("样式表里没有 .dshml-field 规则（纵向字段）");
+	else if (!/className: "dshml-field"/.test(clientSource)) fail("没有组件使用 .dshml-field");
+	else pass(".dshml-field 纵向字段规则存在且被 EnvDialog 使用");
+}
+
 /* ------------------------------------------------------------------- 输出 */
 
 const line = "-".repeat(72);

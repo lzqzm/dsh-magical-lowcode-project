@@ -24,8 +24,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      # 刻意不跑 npm install：这个包没有任何构建步骤，自检本身零依赖。
-      # 核心包是 peerDependencies，在裸检出里本来就解析不到，verify.mjs 会把
-      # 「ERR_MODULE_NOT_FOUND」当作「语法通过」而不是失败。
+      # 自检分两半，用一条 `npm test` 跑完：
+      #   1) 零依赖的一半 —— verify（清单/命名/命名空间的静态检查）、client-stub-check、
+      #      render-check、env-check。它们只读本地源码、把 react 与 ui-primitives 换成桩，
+      #      不需要任何 dependencies，这个包也没有构建步骤。
+      #   2) preset 端点自检 —— 它要把 lib/index.js 复制成探针模块再 import，而 lib/index.js
+      #      静态 import 了 fflate / yaml / @deepseek-ai/dsh-typert-protocol。CI runner 上没有
+      #      宿主安装树，npm 上那个包又只发到 0.1.0-rc.6（缺 RemoteError / remoteErrorOf，
+      #      插件 peer 要 ^0.2.0-0），所以这一半在 CI 上会自己打印 skip 并以退出码 0 结束，
+      #      不会把 CI 弄红；完整覆盖在本地 `npm install`（或用宿主安装树）后跑出来。
       - name: 自检
         run: npm test

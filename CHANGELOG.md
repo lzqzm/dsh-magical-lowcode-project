@@ -16,6 +16,13 @@
 - 自检：新增 `.env` 编辑逻辑桩检 `node test/env-check.mjs`（21 项，已纳入 `npm test` 与
   `prepublishOnly`）。它当场抓到「先追加新键、再清尾部空行」导致的空行注入 bug（会往用户
   `.env` 里插一排空行），已改为先清尾部空行再追加。
+- 修：`npm test` 在**裸检出**（CI runner 上没有宿主安装树、也没装 dependencies）里不再崩在
+  `test/preset-check.mjs` 的 `Cannot find package 'fflate'` 上 —— 那个自检要把 `lib/index.js`
+  复制成探针模块再 import，而 `lib/index.js` 静态 import 了 `fflate` / `yaml` /
+  `@deepseek-ai/dsh-typert-protocol`。现在它先按**实际用到的导出名**探测这三个包，缺任何一个
+  就打印一行 `skip` 并以退出码 0 结束（本地 `npm install` 后仍是完整覆盖）。
+  `.github/workflows/ci.yml` 随之回到一条 `npm test`：4 个 job（ubuntu/windows × node 22/24）
+  之前全红在这一点上。
 
 ## 0.2.2
 

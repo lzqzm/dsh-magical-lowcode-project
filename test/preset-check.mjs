@@ -18,8 +18,39 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
-import { parseDocument } from "yaml";
+
+/*
+ * 这个自检要 import 探针模块（lib/index.js 的原样副本），而 lib/index.js 静态 import 了
+ * fflate / yaml / @deepseek-ai/dsh-typert-protocol。裸检出（CI 上没有宿主安装树、也没装
+ * dependencies）里解析不到它们，所以先按 **实际用到的导出名** 探测一遍：缺任何一个就明确
+ * 跳过（退出码 0），而不是甩一段 ERR_MODULE_NOT_FOUND / SyntaxError 堆栈把整条 `npm test`
+ * 链打断 —— 那样 CI 会红在一个装依赖的细节上，掩盖真正的自检结果。
+ * 按导出名探测还有个好处：npm 上的 @deepseek-ai/dsh-typert-protocol 最新只到 0.1.0-rc.6，
+ * 那个版本没有 RemoteError / remoteErrorOf（插件 peer 要 ^0.2.0-0），装上了也不算可用。
+ * 本地开发跑过 `npm install`（或直接用宿主安装树）后不会走到这里。
+ */
+const REQUIRED = [
+	["fflate", ["strFromU8", "strToU8", "unzipSync", "zipSync"]],
+	["yaml", ["isMap", "isSeq", "parseDocument"]],
+	["@deepseek-ai/dsh-typert-protocol", ["Remote", "RemoteError", "TypertRemoteService", "remoteErrorOf"]],
+];
+const missing = [];
+for (const [specifier, names] of REQUIRED) {
+	try {
+		const mod = await import(specifier);
+		const absent = names.filter((name) => typeof mod[name] === "undefined");
+		missing.push(...(absent.length === 0 ? [] : [`${specifier}（缺导出 ${absent.join(" / ")}）`]));
+	} catch {
+		missing.push(specifier);
+	}
+}
+if (missing.length > 0) {
+	console.log("  skip 预设端点自检需要 " + missing.join(" / ") + "（当前检出里没装或版本不对）—— 跳过。");
+	console.log("       本地：npm install（或用宿主安装树）后跑本文件即可完整覆盖；CI 上没有宿主安装树，这一半必然跳过。");
+	process.exit(0);
+}
+const { strFromU8, strToU8, unzipSync, zipSync } = await import("fflate");
+const { parseDocument } = await import("yaml");
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const MIME = "application/vnd.dsh.preset+zip";

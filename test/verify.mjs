@@ -333,6 +333,29 @@ else {
 	} else pass("状态记忆：右栏页签、展开层级、选中文件入 localStorage，项目树与推送状态走模块级 panelCache（0.2.15）");
 
 	/*
+	 * 行级选择（0.2.20）：用户要「能选中文本，再让 AI 帮我改」，可原生选区正是把窗口拖死
+	 * 的那条路（Chromium 154 的 Blink>Editing>Selection）。所以只读区 user-select: none，
+	 * 选区由插件自己按行算，再把选中的行复制 / 连同路径与行号交给 AI。
+	 */
+	if (
+		!clientSource.includes("VIEW_LINE_LIMIT") ||
+		!clientSource.includes('className: "dshml-line"') ||
+		!clientSource.includes("copySelection") ||
+		!clientSource.includes("sendSelectionToAI") ||
+		!/userSelect: "none"/.test(clientSource)
+	) {
+		fail("lib/client.js 缺少行级选择 / 发给 AI（VIEW_LINE_LIMIT / dshml-line / userSelect: none / copySelection / sendSelectionToAI）");
+	} else pass("行级选择：关掉原生选区，选区由插件自己算，「复制选中」「发给 AI 改」走剪贴板（0.2.20）");
+
+	/*
+	 * 「改这段」（0.2.20）：只把选中的行放进小文本框，保存时按行号替换回原文件 ——
+	 * 用户「手动去改文本就已经出问题了」，大编辑区 + 长距离拖选正是要避开的那条路。
+	 */
+	if (!clientSource.includes("function PatchDialog") || !clientSource.includes("savePatch") || !clientSource.includes("openPatch")) {
+		fail("lib/client.js 缺少「改这段」（PatchDialog / openPatch / savePatch）");
+	} else pass("「改这段」：选中的行单独进小文本框，保存按行号替换回原文件，其余逐字不动（0.2.20）");
+
+	/*
 	 * UI 基元契约回归锁。
 	 *
 	 * 这些值不是猜的：`@deepseek-ai/dsh-client-ui-primitives` 在本机**不是真实安装的包**

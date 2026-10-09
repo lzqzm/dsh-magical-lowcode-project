@@ -63,16 +63,21 @@ if (registration === undefined) fail("lib/client.js 没有调用 window.__Module
 /** 本次渲染是否要把第 1 次 useState 的初始值替换掉（用来拨动 Panel 的 active）。 */
 let activeOverride;
 let useStateCallIndex = 0;
+/** 当前正在执行的组件名与它内部的第几次 useState —— 用来定点覆盖某个状态（0.2.20 起）。 */
+let currentComponent = "";
+let componentCallIndex = 0;
+/** 形如 { "TreeTab#4": <初值> } 的定点覆盖表：把某个组件的某个状态直接摆成目标值。 */
+let stateOverrides;
 const reactStub = {
 	createElement: (type, props, ...children) => ({ __element: true, type, props: props ?? {}, children }),
 	useState: (initial) => {
 		useStateCallIndex += 1;
-		const value =
-			useStateCallIndex === 1 && activeOverride !== undefined
-				? activeOverride
-				: typeof initial === "function"
-					? initial()
-					: initial;
+		componentCallIndex += 1;
+		const fallback = typeof initial === "function" ? initial() : initial;
+		if (stateOverrides !== undefined && Object.prototype.hasOwnProperty.call(stateOverrides, currentComponent + "#" + componentCallIndex)) {
+			return [stateOverrides[currentComponent + "#" + componentCallIndex], () => {}];
+		}
+		const value = useStateCallIndex === 1 && activeOverride !== undefined ? activeOverride : fallback;
 		return [value, () => {}];
 	},
 	useCallback: (fn) => fn,
@@ -187,7 +192,18 @@ function render(element, depth = 0) {
 			 * 否则类组件里读 this.props.children 会拿到 undefined。
 			 */
 			const withChildren = Object.assign({}, props, { children: children.length <= 1 ? children[0] : children });
-			const produced = isClass ? new type(withChildren).render() : type(withChildren);
+			/* 换组件时把「组件内第几次 useState」归零，渲染完再恢复外层计数（栈式）。 */
+			const outerName = currentComponent;
+			const outerIndex = componentCallIndex;
+			currentComponent = name;
+			componentCallIndex = 0;
+			let produced;
+			try {
+				produced = isClass ? new type(withChildren).render() : type(withChildren);
+			} finally {
+				currentComponent = outerName;
+				componentCallIndex = outerIndex;
+			}
 			return { kind: "component", name, props, inner: render(produced, depth + 1) };
 		}
 		const kids = [];
@@ -221,6 +237,8 @@ function textOf(node) {
 /** 拨动 active 后渲染一次设置页入口。 */
 function renderSettings(tabKey) {
 	useStateCallIndex = 0;
+	currentComponent = "";
+	componentCallIndex = 0;
 	activeOverride = tabKey;
 	try {
 		return render(reactStub.createElement(SettingsSection, {}));
@@ -229,9 +247,30 @@ function renderSettings(tabKey) {
 	}
 }
 
+/**
+ * 定点覆盖某些状态后渲染设置页（0.2.20 起）。
+ * overrides 形如 { "TreeTab#4": <值> } —— 组件名 + 该组件内第几次 useState。
+ * 有了它，「文件已经打开」这种中间态才能被真正渲染出来（桩 useState 不会自己改值）。
+ */
+function renderSettingsWith(overrides, tabKey = "content") {
+	useStateCallIndex = 0;
+	currentComponent = "";
+	componentCallIndex = 0;
+	activeOverride = tabKey;
+	stateOverrides = overrides;
+	try {
+		return render(reactStub.createElement(SettingsSection, {}));
+	} finally {
+		activeOverride = undefined;
+		stateOverrides = undefined;
+	}
+}
+
 /** 不拨动 active，渲染侧边栏入口。 */
 function renderSidebar() {
 	useStateCallIndex = 0;
+	currentComponent = "";
+	componentCallIndex = 0;
 	activeOverride = undefined;
 	return render(reactStub.createElement(SidebarAction, {}));
 }
@@ -620,6 +659,123 @@ if (!components.has("conversation.view")) {
 
 	if (!/data-enable-grammarly|data-gramm_editor/.test(clientSource)) fail("没有挡第三方划词扩展的属性（Grammarly 一类会往 textarea 挂浮层）");
 	else pass("textarea 上钉了 spellCheck / autoCorrect / data-gramm 一类属性");
+}
+
+/* ------------------- 14. 行级选择 + 复制选中 + 发给 AI 改（0.2.20） */
+
+/**
+ * 用户诉求：「我要的是可以选择文本，因为目前还只是手动去改文本就已经出问题了，还没有实现
+ * 选择文本让 DeepSeek Harness 的 ai 去帮我改呢」。原生选区正是崩溃那条路，于是：
+ * ① 只读区 user-select: none —— 不再产生原生选区，Blink 的拖选死锁与 Edge 的划词迷你菜单都走不到；
+ * ② 内容按行切开、每行带行号，点一行定起点、拖过或 Shift+点定终点，选中的行整行高亮；
+ * ③ 「复制选中」只复制这几行；「发给 AI 改」把路径 + 行号范围 + 选中内容 + 留空的要求一起进剪贴板。
+ */
+{
+	if (!/userSelect: "none"/.test(clientSource)) fail("只读区还开着原生选区（user-select 不是 none）—— 拖选崩溃那条路仍在");
+	else pass("只读区 user-select: none：不再产生原生选区");
+
+	if (!/const VIEW_LINE_LIMIT = \d+/.test(clientSource)) fail("没有行级选择的行数上限（超长文件一次性铺开会很重）");
+	else pass("行级选择有行数上限 VIEW_LINE_LIMIT");
+
+	if (!/className: "dshml-line"/.test(clientSource)) fail("查看态没有按行渲染（还是整块文本，选不了行）");
+	else pass("查看态按行渲染：每行一个 .dshml-line（带行号槽）");
+
+	if (!/\.dshml-line\[data-sel='1'\]\{background:/.test(clientSource)) fail("选中的行没有高亮样式（选了看不出来）");
+	else pass("选中的行整行高亮（.dshml-line[data-sel='1']）");
+
+	if (!/const selectedRange = \(content\) => \{/.test(clientSource)) fail("没有把选中行折算成一段文本的 selectedRange");
+	else pass("selectedRange 把起止行折算成文本（行号夹在文件范围内）");
+
+	if (!/"发给 AI 改"\)/.test(clientSource)) fail("没有「发给 AI 改」按钮");
+	else pass("「发给 AI 改」按钮：路径 + 行号范围 + 选中内容 + 待补的要求");
+
+	if (!/【我的要求】/.test(clientSource)) fail("发给 AI 的上下文里没有留给用户写要求的空位");
+	else pass("发给 AI 的上下文里留了「我的要求」空位，粘进对话即可");
+
+	if (!/window\.addEventListener\("mouseup", stopDrag\)/.test(clientSource)) fail("拖选没有在松开左键时结束（会一直粘着鼠标）");
+	else pass("松开左键结束拖选，Esc 清除选择");
+
+	if (!/onClick: copyAll \}, "复制全文"\)/.test(clientSource)) fail("「复制全文」按钮丢了");
+	else pass("查看态仍然保留「复制全文」（整份一次复制）");
+
+	/*
+	 * 真渲染一遍「文件已经打开」的查看态：TreeTab 的 selected 是它第 4 个 useState，
+	 * sel（行级选择）是第 14 个 —— 定点覆盖这两个，就能把中间态画出来。
+	 */
+	const FILE = { status: "ready", path: "C:\\proj\\pages\\index.html", content: "line one\nline two\nline three", editing: false };
+	try {
+		const tree = renderSettingsWith({ "TreeTab#4": FILE });
+		const rows = [];
+		let userSelect = null;
+		walk(tree, (n) => {
+			if (n.kind !== "host") return;
+			if (n.props?.className === "dshml-line") rows.push(n);
+			if (n.props?.className === "dshml-view") userSelect = n.props.style?.userSelect;
+		});
+		if (rows.length !== 3) fail(`查看态应按行渲染出 3 行，实际 ${rows.length} 行`);
+		else pass("查看态真渲染：3 行内容切成 3 个 .dshml-line");
+		if (userSelect !== "none") fail(`查看态容器 style.userSelect 应为 none，实际 ${String(userSelect)}`);
+		else pass("查看态容器的 userSelect 是 none（原生选区真的关掉了）");
+		if (!textOf(rows[0]).startsWith("1")) fail(`第一行没带行号，实际「${textOf(rows[0])}」`);
+		else pass("每行前面带行号（「发给 AI 改」给的行号范围就是指它）");
+		if (!textOf(tree).includes("复制全文")) fail("查看态里找不到「复制全文」按钮");
+		else pass("查看态顶部仍是「编辑 / 复制全文 / 关闭」");
+	} catch (error) {
+		fail(`查看态渲染抛错：${error?.message ?? error}`);
+	}
+
+	try {
+		const tree = renderSettingsWith({ "TreeTab#4": FILE, "TreeTab#14": { a: 0, b: 1 } });
+		const selectedRows = [];
+		walk(tree, (n) => {
+			if (n.kind === "host" && n.props?.className === "dshml-line" && n.props?.["data-sel"] === "1") selectedRows.push(n);
+		});
+		const text = textOf(tree);
+		if (selectedRows.length !== 2) fail(`选中第 1–2 行时应高亮 2 行，实际 ${selectedRows.length} 行`);
+		else pass("选中第 1–2 行时整行高亮（data-sel=1）");
+		for (const label of ["已选 第 1–2 行", "复制选中", "发给 AI 改", "清除选择"]) {
+			if (!text.includes(label)) fail(`选中一段后界面上缺少「${label}」`);
+			else pass(`选中一段后出现「${label}」`);
+		}
+	} catch (error) {
+		fail(`选中态渲染抛错：${error?.message ?? error}`);
+	}
+
+	/*
+	 * 「改这段」：选中的这几行单独进一个小文本框，保存时按行号替换回原文件
+	 * （不必再进「整份文本」的大 textarea —— 那正是拖选崩溃那条路）。
+	 */
+	if (!/onClick: openPatch \}, "改这段"\)/.test(clientSource)) fail("选中后没有「改这段」按钮（只能整份文件进大文本框改）");
+	else pass("选中后出现「改这段」：只把这几行放进小文本框");
+
+	if (!/function PatchDialog\(/.test(clientSource)) fail("没有 PatchDialog 组件");
+	else pass("PatchDialog 组件在（标题带行号范围）");
+
+	if (!/function savePatch|const savePatch = useCallback/.test(clientSource)) fail("「改这段」没有写回逻辑");
+	else pass("savePatch 按行号把改后的内容拼回整份文本再写文件");
+
+	try {
+		const tree = renderSettingsWith({ "TreeTab#4": FILE, "TreeTab#14": { a: 0, b: 1 }, "TreeTab#15": { from: 0, to: 1, draft: "line one\nline two", saving: false } });
+		const text = textOf(tree);
+		for (const label of ["替换这 2 行", "复制给 AI 改", "文件其余部分逐字保留"]) {
+			if (!text.includes(label)) fail(`「改这段」对话框里缺少「${label}」`);
+			else pass(`「改这段」对话框渲染出「${label}」`);
+		}
+		const titles = [];
+		walk(tree, (n) => {
+			if (n.kind === "host" && n.name === primitivesStub.Modal) titles.push(n.props?.title);
+		});
+		if (!titles.includes("改这段 · 第 1–2 行")) fail(`对话框标题没带行号范围，实际 ${JSON.stringify(titles)}`);
+		else pass("「改这段」对话框标题写清行号范围（改这段 · 第 1–2 行）");
+		const boxes = [];
+		walk(tree, (n) => {
+			if (n.kind === "host" && n.name === "textarea") boxes.push(n);
+		});
+		if (boxes.length !== 1) fail(`「改这段」对话框里应有 1 个 textarea，实际 ${boxes.length} 个`);
+		else pass("「改这段」对话框里就是一个小 textarea（只装选中的行）");
+	} catch (error) {
+		fail(`「改这段」渲染抛错：${error?.message ?? error}`);
+	}
 }
 
 /* ------------------------------------------------------------------- 输出 */

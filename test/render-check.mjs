@@ -878,6 +878,56 @@ if (!components.has("conversation.view")) {
 	}
 }
 
+/* ------------- 16. 大文件改走系统编辑器：浏览器不碰文本（0.2.22） */
+
+/**
+ * 用户在 0.2.21 截图后的结论：「太小了，而且这样子把代码分页处理不方便」。
+ * 根因没变：浏览器在**可编辑文本控件**里做长距离原生选区会死锁（Chromium 154 的
+ * Blink>Editing>Selection）。所以正解不是把编辑区做大，而是浏览器根本不碰文本：
+ * 插件只把路径交给宿主，宿主 detached spawn 系统编辑器（VS Code / 记事本 / 文件管理器）。
+ * 插件内分页编辑器保留，但三个入口（工具行 / 右键菜单 / 分页对话框）都以「用编辑器打开」为先。
+ */
+{
+	if (!/projectOpenExternal: \["path"\]/.test(clientSource)) fail("METHOD_PARAMS 里没有 projectOpenExternal");
+	else pass("projectOpenExternal 登记进 METHODS / METHOD_PARAMS（对应 host 同名 RPC）");
+
+	if (!/const openExternal = useCallback/.test(clientSource)) fail("没有 openExternal 回调");
+	else pass("openExternal 把路径发给宿主，由系统里的编辑器打开");
+
+	if (!/onClick: \(\) => openExternal\(selected\.path\) \}, "用编辑器打开"\)/.test(clientSource)) fail("工具行没有「用编辑器打开」按钮");
+	else pass("工具行的「用编辑器打开」直接开当前文件");
+
+	if (!/label: "🖥 用编辑器打开"/.test(clientSource)) fail("文件右键菜单没有「用编辑器打开」");
+	else pass("文件右键菜单也有「用编辑器打开」");
+
+	if (!/onOpenExternal: openExternal/.test(clientSource)) fail("PatchDialog 没接上 onOpenExternal");
+	else pass("PatchDialog 接上 onOpenExternal（分页框里也能一键交给系统编辑器）");
+
+	const FILE = { status: "ready", path: "C:\\proj\\pages\\index.html", content: "line one\nline two", editing: false };
+	try {
+		const tree = renderSettingsWith({ "TreeTab#4": FILE });
+		const all = textOf(tree);
+		if (!all.includes("用编辑器打开")) fail("查看态没渲染「用编辑器打开」");
+		else if (all.indexOf("用编辑器打开") > all.indexOf("复制全文")) fail("「用编辑器打开」应排在「编辑」「复制全文」之前（它现在是主路）");
+		else pass("查看态里「用编辑器打开」排在「编辑」「复制全文」之前（主路）");
+
+		const editing = renderSettingsWith({
+			"TreeTab#4": FILE,
+			"TreeTab#15": { from: 0, to: 1, total: 2, drafts: ["line one"], page: 0, saving: false },
+		});
+		let modal = null;
+		walk(editing, (n) => {
+			if (modal === null && n.kind === "host" && n.name === primitivesStub.Modal) modal = n;
+		});
+		if (modal === null) fail("编辑态没渲染出分页对话框");
+		else if (!textOf(modal).includes("用编辑器打开")) fail("分页对话框里没有「用编辑器打开」");
+		else if (!/min\(62vh, 640px\)/.test(clientSource)) fail("编辑区高度没有放大（仍是 min(40vh, 420px)）");
+		else pass("分页对话框里也能一键交给系统编辑器，且编辑区高度放大到 min(62vh, 640px)");
+	} catch (error) {
+		fail(`外部编辑器渲染抛错：${error?.message ?? error}`);
+	}
+}
+
 /* ------------------------------------------------------------------- 输出 */
 
 const line = "-".repeat(72);

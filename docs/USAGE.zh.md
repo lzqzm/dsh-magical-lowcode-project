@@ -108,6 +108,28 @@ host 半边**所有带路径的 RPC** 都会先做一次归属校验：路径必
 4. **顺带一提**：0.2.18 的「超过 40 万字符只读」阈值（`EDITOR_READONLY_LIMIT`）与整份编辑态
    （`selected.editing`）在这一版都拆掉了 —— 分页之后它们都不需要了，大文件也能改。
 
+### 0.9 大文件改走系统编辑器：浏览器根本不碰文本（0.2.22）
+
+分页只是把瓶颈往后推 —— 只要编辑还发生在浏览器里，就得在「一次装多少行」上做取舍。0.2.22 起
+右栏「文件内容」多了主路按钮 **「用编辑器打开」**：点一下由 host 半边挑一个系统程序，`detached`
+起进程把文件递出去，**浏览器里连一个文本域都不参与**，所以 900 行和 90 万行没有区别。
+
+1. **三个入口都指向同一件事**：工具行的「用编辑器打开」（排在「编辑」前面）、文件行右键菜单里的
+   「🖥 用编辑器打开」、以及分页对话框里的「用编辑器打开」。
+2. **挑程序的顺序**（`resolveExternalEditor`）：环境变量 `DSHML_EDITOR`（显式指定的可执行文件，
+   最优先）→ **VS Code**（`%LOCALAPPDATA%\Programs\Microsoft VS Code`、Insiders 版、
+   `%ProgramFiles%`、`%ProgramFiles(x86)%` 四处置都试）→ 系统**记事本** → 兜底用**文件管理器**
+   只选中该文件（`explorer.exe /select,`）。macOS 交给 `open`、其他平台交给 `xdg-open`，
+   与在桌面双击文件一致。
+3. **改完怎么回到插件**：外部编辑器保存的是磁盘上的同一份文件，回到插件点 **刷新** 就会重新读。
+   插件不会自动盯着文件变化（没必要常驻 watcher），也不会因为外面改了而覆盖你的草稿。
+4. **分页编辑器仍然保留**：不方便离开页面时还能改几行；对话框高度也从 `min(40vh, 420px)` 提到了
+   `min(62vh, 640px)`。
+5. **只对文件有效**：目录不能「用编辑器打开」（host 会回 `not-a-file`）。
+
+> 想让别的编辑器接管，设一个环境变量再重启 DSH：`DSHML_EDITOR=D:\tools\zed.exe`
+> （必须是**存在**的可执行文件绝对路径；指到不存在的文件时会被忽略，继续按上面的顺序挑）。
+
 ---
 
 ## 1. 左栏：项目树（`TreeTab`）
@@ -132,6 +154,7 @@ host 半边**所有带路径的 RPC** 都会先做一次归属校验：路径必
 | **↓**（**行内**，只对目录） | `projectRunScript` → `projectResetPushState` | 按目录语义挑脚本（见 1.5）；确认后执行，成功后**清空全部推送状态记录**（本地文件已被线上覆盖） |
 | **✏**（**行内**，只对 32 位 UUID 目录） | `projectSetProjectName(workspacePath, uuid, name)` | 弹 `prompt` 要显示名（清空则删掉映射）；只改 `.dsh-project-names.json`，**不动物理目录名** |
 | **📋**（**行内**） | — | 写进剪贴板；剪贴板不可用时把路径显示在提示行里 |
+| **用编辑器打开**（**工具栏**，右栏打开文件后） | `projectOpenExternal(path)` | **0.2.22 起的主路**：host 挑一个系统程序（`DSHML_EDITOR` → VS Code → 记事本 → 文件管理器只选中），`detached` spawn 出去把文件交给它 —— 浏览器完全不碰文本，所以多大的文件都不受分页所限；外面改完回插件点「刷新」重新读（见 0.9）。只对文件有效，目录会回 `not-a-file` |
 | **查看**（**行内**，只对文件） | `projectReadFile(path)` | 读 UTF-8，单文件上限 2MB；内容出现在**右栏「文件内容」**页签，**默认只读查看**（0.2.19 起），点**编辑**才进编辑框；查看态高度跟窗口走（`min(62vh, 760px)`）；查看只渲染前 3000 行（`VIEW_LINE_LIMIT`，行号仍是真实行号） |
 | **行级选择**（右栏，只读查看态） | — | **原生文本选区在只读区里关掉了**（`user-select: none`）—— 浏览器那条原生拖选正是把窗口拖死的那条路（Chromium 154 的 Blink>Editing>Selection，0.2.19/0.2.20）；改由插件按行算：内容每行一个 `<div>`、前面带行号，**点一行定起点**、**拖过（或 Shift+点）另一行定终点**，选中的行整行高亮，下面显示「已选 第 X–Y 行 · 共 N 行 · M 字符」，按 <kbd>Esc</kbd> 或「清除选择」取消 |
 | **复制选中**（右栏，选中后） | — | 只把选中的这几行写进剪贴板（0.2.20 起） |
@@ -153,6 +176,7 @@ host 半边**所有带路径的 RPC** 都会先做一次归属校验：路径必
 | 菜单项 | 可用条件 | 行为 |
 | --- | --- | --- |
 | 👁 查看内容 | 文件行 | 同**查看** |
+| 🖥 用编辑器打开 | 文件行 | 同工具栏**用编辑器打开**：交给系统编辑器（VS Code / 记事本 / 文件管理器），浏览器不碰文本（0.2.22） |
 | 🤖 复制内容（发给 AI） | 文件行 | `projectReadFile` 读内容 + 绝对路径一起写进剪贴板（上游是把文本直接注进对话输入框，那依赖它补丁内的私有函数，插件版拿不到，所以退化成「复制上下文，粘进对话即可」） |
 | ↑ 推送 | 该行 `● 待推送` | 同上表 **↑ 推送**（`source-page-push.js` / `source-api-push.js` → 成功后 `projectMarkPushed`） |
 | ↓ 下拉 | 目录行 | 同上表 **↓ 下拉**（按 1.5 的语义挑脚本） |
@@ -465,6 +489,7 @@ PROJECT_NAME=功能验证项目
 | 内容 | 位置 |
 | --- | --- |
 | 面板 UI 与按钮文案 | `lib/client.js`（`TreeTab` / `PushTab` / `PreviewTab` / `ScriptTab` / `PresetTab`；左右栏布局与 `BROWSER_CSS`、右栏页签表 `DETAIL_TABS`、面板外壳 `Panel` 都在文件末尾） |
-| 12 个 RPC 的实现与白名单/上限 | `lib/index.js`（`class DesktopProjectService`，方法清单见文件末尾的 `markRemote` 循环） |
+| 15 个 RPC 的实现与白名单/上限 | `lib/index.js`（`class DesktopProjectService`，方法清单见文件末尾的 `markRemote` 循环） |
+| 「用编辑器打开」挑程序与 spawn | `lib/index.js` 的 `resolveExternalEditor` / `openFileExternally` / `projectOpenExternal`（桩检见 `test/open-check.mjs`） |
 | 体检规则 | `lib/index.js` 的 `projectLint` |
 | 两条预设路由 | `lib/index.js` 的 `apply()` 里 `connection.fetch.register` 那两段 |

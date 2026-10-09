@@ -374,6 +374,26 @@ else {
 	} else pass("分页编辑：任何编辑控件一次只装 EDITOR_PAGE_LINES 行，「编辑」与「改这段」共用 openRange，整份编辑那条路已拆除（0.2.21）");
 
 	/*
+	 * 用系统编辑器打开（0.2.22）：用户的结论是「分页也不方便」，正解是浏览器根本不碰文本。
+	 * host 只负责挑可执行文件并 spawn 出去（不需要回读内容），client 侧三个入口
+	 * （工具行 / 右键菜单 / 分页对话框里）都指向同一个 projectOpenExternal。
+	 */
+	if (
+		!hostSource.includes("function resolveExternalEditor") ||
+		!hostSource.includes("function openFileExternally") ||
+		!hostSource.includes("async projectOpenExternal(path)") ||
+		!hostSource.includes('"projectOpenExternal"') ||
+		!hostSource.includes("DSHML_EDITOR") ||
+		!hostSource.includes("selectOnly") ||
+		!clientSource.includes('"projectOpenExternal"') ||
+		!clientSource.includes("const openExternal = useCallback") ||
+		!clientSource.includes("用编辑器打开") ||
+		!clientSource.includes("onOpenExternal: openExternal")
+	) {
+		fail("缺少「用编辑器打开」（host: resolveExternalEditor / openFileExternally / projectOpenExternal / DSHML_EDITOR；client: projectOpenExternal / openExternal / 用编辑器打开 / onOpenExternal）");
+	} else pass("用编辑器打开：host 按 DSHML_EDITOR→VS Code→记事本→文件管理器挑程序并 detached spawn，client 三个入口共用 projectOpenExternal（0.2.22）");
+
+	/*
 	 * UI 基元契约回归锁。
 	 *
 	 * 这些值不是猜的：`@deepseek-ai/dsh-client-ui-primitives` 在本机**不是真实安装的包**

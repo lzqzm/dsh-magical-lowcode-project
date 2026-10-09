@@ -59,8 +59,9 @@ tab) share this one browser.
 
 - **Left · Project tree** — browse the project **multi-level** (click a directory to expand it; that level is
   fetched only then); a **fuzzy find box** sits on top of the tree: it searches the whole project folder
-  recursively and matches subsequences (「备管」finds 「备件管理」, `spp` finds `source-page-push.js`), and clicking a
-  hit expands the tree down to it; every row carries an inline `● dirty` / `✔ pushed` mark; the row action buttons
+  recursively and matches subsequences (「备管」finds 「备件管理」, `spp` finds `source-page-push.js`); an entry is listed
+  only when its name **or** its relative path matches (typing `index.html` no longer drags in `page.js` from the same
+  folder), and clicking a hit expands the tree down to it; every row carries an inline `● dirty` / `✔ pushed` mark; the row action buttons
   (**↑ push** / **↓ pull** / **✏ project name** / **view** / **📋 copy path**) appear only while that row is
   **hovered or selected**, so a resting row shows just the name and its status tag; **right-clicking** any row
   opens the full action menu (view content, copy content for the AI, pre-push lint, refresh, re-scan push

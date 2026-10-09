@@ -212,9 +212,15 @@ else {
 
 	// 模糊查找（0.2.15）：树是按需加载的，没展开的层客户端根本没有数据，
 	// 所以递归搜索必须在 host 半边，打分函数也必须在 host 里（客户端只负责渲染）。
-	if (!hostSource.includes("async projectSearchEntries(") || !hostSource.includes("function fuzzyScore(") || !hostSource.includes("SEARCH_MAX_RESULTS")) {
-		fail("lib/index.js 缺少模糊查找（projectSearchEntries / fuzzyScore / SEARCH_MAX_RESULTS）");
-	} else pass("模糊查找：projectSearchEntries 递归整棵树 + fuzzyScore 子序列打分（上限 200 条 / 4000 目录 / 16 层）");
+	// 0.2.16 起条目得分单独抽成 scoreEntry：名字那一路的 +20 分只能加在命中项上。
+	if (
+		!hostSource.includes("async projectSearchEntries(") ||
+		!hostSource.includes("function fuzzyScore(") ||
+		!hostSource.includes("function scoreEntry(") ||
+		!hostSource.includes("SEARCH_MAX_RESULTS")
+	) {
+		fail("lib/index.js 缺少模糊查找（projectSearchEntries / fuzzyScore / scoreEntry / SEARCH_MAX_RESULTS）");
+	} else pass("模糊查找：projectSearchEntries 递归整棵树 + fuzzyScore 子序列打分 + scoreEntry 过滤（上限 200 条 / 4000 目录 / 16 层）");
 
 	// 12 个 remote 方法必须都在类里定义
 	const listMatch = hostSource.match(/for \(const remoteMethod of \[([\s\S]*?)\]\)/);

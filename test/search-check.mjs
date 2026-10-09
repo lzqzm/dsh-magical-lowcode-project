@@ -2,10 +2,11 @@
 /**
  * dsh-magical-lowcode-project · 工程目录模糊搜索打分桩检。
  *
- * 为什么单独测：「像不像」完全由 `lib/index.js` 里的 `normalizeForSearch` / `fuzzyScore`
- * 两个纯函数决定 —— 它们同时决定**是否命中**与**排序**。改权重、改归一化规则会让
- * 「备管」再也搜不到「备件管理」，而这类退化在页面上只表现为「结果顺序怪怪的」，
- * 所以直接从 host 源码里把两个函数抠出来在 vm 里跑。
+ * 为什么单独测：「像不像」完全由 `lib/index.js` 里的 `normalizeForSearch` / `fuzzyScore` /
+ * `scoreEntry` 三个纯函数决定 —— 它们同时决定**是否命中**与**排序**。改权重、改归一化规则会让
+ * 「备管」再也搜不到「备件管理」，而 `scoreEntry` 写错更糟：0.2.15 就把名字那一路的 +20 分
+ * 加在了未命中（-1）上，导致搜索等于没过滤。这类退化在页面上只表现为「结果怪怪的」，
+ * 所以直接从 host 源码里把三个函数抠出来在 vm 里跑。
  *
  * 抠函数按「函数声明行的缩进 + 同名缩进的收尾大括号」切分，不做大括号配平 ——
  * 函数体里的正则字面量会让朴素的引号/花括号扫描器错乱（与 test/env-check.mjs 同一套做法）。
@@ -58,9 +59,9 @@ function check(label, actual, expected) {
 	console.log("  FAIL  " + label + "\n        期望 " + JSON.stringify(expected) + "\n        实际 " + JSON.stringify(actual));
 }
 
-const pieces = [extractFunction(source, "normalizeForSearch"), extractFunction(source, "fuzzyScore")];
+const pieces = [extractFunction(source, "normalizeForSearch"), extractFunction(source, "fuzzyScore"), extractFunction(source, "scoreEntry")];
 if (pieces.some((piece) => piece === null)) {
-	console.log("  FAIL  没能在 lib/index.js 里定位 normalizeForSearch / fuzzyScore（改名或删掉了？）");
+	console.log("  FAIL  没能在 lib/index.js 里定位 normalizeForSearch / fuzzyScore / scoreEntry（改名或删掉了？）");
 	console.log("------------------------------------------------------------------------");
 	console.log("通过 0 · 失败 1");
 	process.exit(1);
@@ -69,10 +70,11 @@ if (pieces.some((piece) => piece === null)) {
 const sandbox = {};
 createContext(sandbox);
 runInContext(
-	pieces.join("\n\n") + "\nthis.normalizeForSearch = normalizeForSearch;\nthis.fuzzyScore = fuzzyScore;\n",
+	pieces.join("\n\n") +
+		"\nthis.normalizeForSearch = normalizeForSearch;\nthis.fuzzyScore = fuzzyScore;\nthis.scoreEntry = scoreEntry;\n",
 	sandbox,
 );
-const { normalizeForSearch, fuzzyScore } = sandbox;
+const { normalizeForSearch, fuzzyScore, scoreEntry } = sandbox;
 
 console.log("dsh-magical-lowcode-project · 模糊搜索打分桩检");
 console.log("------------------------------------------------------------------------");
@@ -105,6 +107,18 @@ check("短名字比长名字分高（备件 > 备件管理 > 备件管理移动�
 	fuzzyScore("备件", "备件管理") > fuzzyScore("备件", "备件管理移动端"),
 	true,
 );
+
+/*
+ * 条目得分（0.2.16 修的过滤 bug）：名字那一路的 +20 分只能加在**已命中**的名字上。
+ * 写成 `fuzzyScore(name) + 20` 时，不命中（-1）也变成 19 分，于是 `score >= 0` 全通过，
+ * 输入 `index.html` 会把同目录的 `page.js` / `page.css` / `page.json` 一起列出来。
+ */
+check("名字与路径都不命中就不列出（index.html 不带出同目录的 page.js）", scoreEntry("index.html", "page.js", "pages/home/page.js"), -1);
+check("名字命中：index.html 命中自己", scoreEntry("index.html", "index.html", "pages/home/index.html") > 0, true);
+check("只在路径里命中也算命中（备管 命中 pages/备件管理 下的 page.js）", scoreEntry("备管", "page.js", "pages/备件管理/page.js") > 0, true);
+check("名字命中比只在路径里命中分高", scoreEntry("index", "index.html", "pages/index.html") > scoreEntry("index", "page.js", "pages/index/index.html"), true);
+check("完全不沾边仍然不命中", scoreEntry("zzz", "page.js", "pages/home/page.js"), -1);
+check("空查询不列出任何条目", scoreEntry("", "index.html", "pages/home/index.html"), -1);
 
 console.log("------------------------------------------------------------------------");
 if (failures.length > 0) {

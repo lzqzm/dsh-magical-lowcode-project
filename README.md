@@ -69,7 +69,7 @@ tab) share this one browser.
   greyed out instead of hidden). Clicking a file name opens it in **the right pane's “File content” tab** for
   editing and saving; a 32-char UUID project directory can be given a display name; the toolbar's
   **environment config** edits the workspace root `.env` (`SERVER_URL` / `PROJECT_UUID`)
-- **Right · File content** — the editor for the selected file (save / saved / close; it grows with the window and can be dragged taller from its bottom-right corner); a browsing hint while nothing is selected
+- **Right · File content** — the editor for the selected file (save / saved / close; it grows with the window, and files over 400k characters open read-only); a browsing hint while nothing is selected
 - **Right · Preview & checkup** — the “in-tree lint” results land here (right-click a row and lint switches to this tab), followed by the sandbox preview (opens in a new tab) and the lint issue list
 - **Right · Push status** — see at a glance what changed but has not been pushed; mark pushed, reset, set a display project name
 - **Right · Project scripts** — run a `source-*.js` from the workspace root (six ready-made shortcuts) with arguments, echoing exit code, command and output;

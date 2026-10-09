@@ -548,24 +548,49 @@ if (!components.has("conversation.view")) {
 
 /**
  * 用户诉求：「文件内容」这边显示区域的高度不够。编辑器沿用了 preStyle，而它带
- * maxHeight 320 —— 宽屏下右栏一大半是空白。钉住：编辑器把 maxHeight 解开、高度跟窗口走、
- * 还能手动往下拉；左右两栏的上限也一起放宽（否则 pane 会把编辑器裁掉再套一层滚动）。
+ * maxHeight 320 —— 宽屏下右栏一大半是空白。钉住：编辑器有自己的样式表、高度跟窗口走；
+ * 左右两栏的上限也一起放宽（否则 pane 会把编辑器裁掉再套一层滚动）。
  */
 {
+	if (!/const editorStyle = \{/.test(clientSource)) fail("文件内容编辑器没有自己的样式表（仍从 preStyle 拼）");
+	else pass("编辑器有独立样式 editorStyle");
+
 	if (!/maxHeight: "none"/.test(clientSource)) fail("文件内容编辑器仍被 preStyle 的 maxHeight 320 压住（高度只有一屏的零头）");
 	else pass("编辑器解开 preStyle 的 maxHeight：高度跟窗口走");
 
 	if (!/height: "min\(62vh, 760px\)"/.test(clientSource)) fail("编辑器没有给随窗口变化的高度");
 	else pass("编辑器高度 min(62vh, 760px)，宽屏下不再是一条缝");
 
-	if (!/resize: "vertical"/.test(clientSource)) fail("编辑器不能手动往下拉");
-	else pass("编辑器可手动下拉（resize: vertical）");
-
 	if (!/\.dshml-pane\{[^}]*max-height:min\(82vh,1000px\)/.test(clientSource)) fail("右栏容器 .dshml-pane 的上限太小，会把编辑器裁掉");
 	else pass("右栏容器上限放宽到 min(82vh, 1000px)");
 
 	if (!/\.dshml-tree\{[^}]*max-height:min\(80vh,900px\)/.test(clientSource)) fail("左树上限没跟着放宽（左右两栏高度差太明显）");
 	else pass("左树上限同步放宽到 min(80vh, 900px)");
+}
+
+/* ------------------------- 12. 编辑器的渲染稳定性（0.2.18） */
+
+/**
+ * 用户诉求：在「文件内容」里多选几次，有几率整个浏览器崩溃。可疑面逐个钉住：
+ * ① 编辑区不再从 preStyle 继承一批给 <pre> 用的属性（maxHeight/overflow/wordBreak）；
+ * ② 关掉可拖拽的 resize 手柄（浏览器在可 resize 的大 textarea 上反复拖选有崩溃记录）；
+ * ③ 超大文本改成只读，别让受控 textarea 带着几百 KB 文本做选区重绘。
+ */
+{
+	if (/style: Object\.assign\(\{\}, preStyle/.test(clientSource)) fail("编辑器还在拼 preStyle（给 <pre> 的 maxHeight / overflow / wordBreak 会跟着进 textarea）");
+	else pass("编辑器不再继承 preStyle：maxHeight / overflow / wordBreak 都留在 <pre> 那边");
+
+	if (!/resize: "none"/.test(clientSource)) fail("编辑器仍带可拖拽的 resize 手柄（拖选崩溃的可疑点）");
+	else pass("编辑器关掉 resize 手柄（resize: none），高度只由样式决定");
+
+	if (!/const EDITOR_READONLY_LIMIT = \d+/.test(clientSource)) fail("没有大文件只读阈值（受控 textarea 扛不住超大文本的选区重绘）");
+	else pass("大文件只读阈值 EDITOR_READONLY_LIMIT");
+
+	if (!/已切换为只读预览/.test(clientSource)) fail("大文件只读时界面没有提示");
+	else pass("大文件只读时给出提示，并隐藏保存按钮");
+
+	if (!/readOnly: selected\.content\.length > EDITOR_READONLY_LIMIT/.test(clientSource)) fail("只读阈值没有真的接到 textarea 上");
+	else pass("只读阈值接在 textarea 的 readOnly 上");
 }
 
 /* ------------------------------------------------------------------- 输出 */

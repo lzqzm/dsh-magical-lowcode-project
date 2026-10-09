@@ -477,6 +477,10 @@ if (!components.has("conversation.view")) {
 	if (!/\.dshml-field\{/.test(clientSource)) fail("样式表里没有 .dshml-field 规则（纵向字段）");
 	else if (!/className: "dshml-field"/.test(clientSource)) fail("没有组件使用 .dshml-field");
 	else pass(".dshml-field 纵向字段规则存在且被 EnvDialog 使用");
+
+	if (!/\.dshml-dirty\{/.test(clientSource)) fail("样式表里没有 .dshml-dirty 规则（待推送标红）");
+	else if (!/const statusTag = /.test(clientSource)) fail("没有 statusTag 助手（状态 Tag 标红）");
+	else pass("待推送状态标红（.dshml-dirty + statusTag）");
 }
 
 /* ------------------------------------------------------------------- 输出 */

@@ -72,6 +72,16 @@ const reactStub = {
 	useRef: (initial) => ({ current: initial === undefined ? null : initial }),
 	useEffect: () => {},
 	Fragment: Symbol("Fragment"),
+	/* 面板级错误边界是个 class 组件（PaneBoundary extends React.Component）。 */
+	Component: class Component {
+		constructor(props) {
+			this.props = props ?? {};
+			this.state = {};
+		}
+		setState(next) {
+			this.state = Object.assign({}, this.state, typeof next === "function" ? next(this.state) : next);
+		}
+	},
 };
 const primitivesStub = {
 	Button: "stub.Button",

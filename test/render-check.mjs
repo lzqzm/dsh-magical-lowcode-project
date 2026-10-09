@@ -79,6 +79,16 @@ const reactStub = {
 	useRef: (initial) => ({ current: initial === undefined ? null : initial }),
 	useEffect: () => {},
 	Fragment: Symbol("Fragment"),
+	/* 面板级错误边界是个 class 组件（PaneBoundary extends React.Component）。 */
+	Component: class Component {
+		constructor(props) {
+			this.props = props ?? {};
+			this.state = {};
+		}
+		setState(next) {
+			this.state = Object.assign({}, this.state, typeof next === "function" ? next(this.state) : next);
+		}
+	},
 };
 const primitivesStub = { Button: "UI.Button", Input: "UI.Input", Modal: "UI.Modal", Pill: "UI.Pill", Tag: "UI.Tag" };
 const requireStub = (specifier) => {
@@ -167,7 +177,18 @@ function render(element, depth = 0) {
 		const { type, props, children } = element;
 		if (typeof type === "function") {
 			const name = type.name === "" ? "<anonymous>" : type.name;
-			return { kind: "component", name, props, inner: render(type(props), depth + 1) };
+			/*
+			 * 类组件（面板级错误边界 PaneBoundary）：桩里 new 出实例再取 render()。
+			 * 真 React 的「抛错就切错误态」桩模拟不了，这里只需要它把 children 透出来。
+			 */
+			const isClass = type.prototype !== undefined && typeof type.prototype.render === "function";
+			/*
+			 * 真 React 会把尾巴参数折进 props.children；桩也得还原这一点，
+			 * 否则类组件里读 this.props.children 会拿到 undefined。
+			 */
+			const withChildren = Object.assign({}, props, { children: children.length <= 1 ? children[0] : children });
+			const produced = isClass ? new type(withChildren).render() : type(withChildren);
+			return { kind: "component", name, props, inner: render(produced, depth + 1) };
 		}
 		const kids = [];
 		for (const child of children ?? []) {

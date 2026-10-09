@@ -25,6 +25,7 @@ const EXPECTED_METHODS = [
 	"projectPushStatus",
 	"projectRunScript",
 	"projectResolveScript",
+	"projectSearchEntries",
 	"projectMarkPushed",
 	"projectResetPushState",
 	"projectRenameEntry",

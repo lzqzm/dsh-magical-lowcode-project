@@ -210,6 +210,12 @@ else {
 		fail("lib/index.js 缺少运行前环境变量预检（projectResolveScript / SCRIPT_ENV_KEYS / readEnvValue）");
 	} else pass("运行前预检：projectResolveScript 检查脚本目录 .env 的 SERVER_URL / USERNAME / PASSWORD / PROJECT_UUID");
 
+	// 模糊查找（0.2.15）：树是按需加载的，没展开的层客户端根本没有数据，
+	// 所以递归搜索必须在 host 半边，打分函数也必须在 host 里（客户端只负责渲染）。
+	if (!hostSource.includes("async projectSearchEntries(") || !hostSource.includes("function fuzzyScore(") || !hostSource.includes("SEARCH_MAX_RESULTS")) {
+		fail("lib/index.js 缺少模糊查找（projectSearchEntries / fuzzyScore / SEARCH_MAX_RESULTS）");
+	} else pass("模糊查找：projectSearchEntries 递归整棵树 + fuzzyScore 子序列打分（上限 200 条 / 4000 目录 / 16 层）");
+
 	// 12 个 remote 方法必须都在类里定义
 	const listMatch = hostSource.match(/for \(const remoteMethod of \[([\s\S]*?)\]\)/);
 	if (listMatch === null) fail("找不到 remoteMethod 注册循环");
@@ -305,6 +311,20 @@ else {
 		if (injectCalls < registerKeys.length) fail(`slots.inject 调用数 ${injectCalls} 少于 register 数 ${registerKeys.length}：注册必须包在 inject 里，否则 disposer 不落在本插件 fiber 上`);
 		else pass(`注册 ${registerKeys.length} 个 slot（${registerKeys.join(", ")}），全部经 slots.inject 包裹`);
 	}
+
+	/*
+	 * 状态记忆（0.2.15）：三个入口各挂一套 Panel，切走再回来就是一次新的挂载，
+	 * 所以「切进去数据清空」只能靠 localStorage + 模块级缓存救回来。
+	 */
+	if (
+		!clientSource.includes("DETAIL_KEY") ||
+		!clientSource.includes("EXPANDED_KEY") ||
+		!clientSource.includes("SELECTED_KEY") ||
+		!clientSource.includes("panelCache") ||
+		!clientSource.includes("projectSearchEntries")
+	) {
+		fail("lib/client.js 缺少状态记忆 / 模糊查找（DETAIL_KEY / EXPANDED_KEY / SELECTED_KEY / panelCache / projectSearchEntries）");
+	} else pass("状态记忆：右栏页签、展开层级、选中文件入 localStorage，项目树与推送状态走模块级 panelCache（0.2.15）");
 
 	/*
 	 * UI 基元契约回归锁。

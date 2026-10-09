@@ -58,7 +58,9 @@ and a shared path box plus toolbar on top. All **three entries** (settings secti
 tab) share this one browser.
 
 - **Left · Project tree** — browse the project **multi-level** (click a directory to expand it; that level is
-  fetched only then); every row carries an inline `● dirty` / `✔ pushed` mark; the row action buttons
+  fetched only then); a **fuzzy find box** sits on top of the tree: it searches the whole project folder
+  recursively and matches subsequences (「备管」finds 「备件管理」, `spp` finds `source-page-push.js`), and clicking a
+  hit expands the tree down to it; every row carries an inline `● dirty` / `✔ pushed` mark; the row action buttons
   (**↑ push** / **↓ pull** / **✏ project name** / **view** / **📋 copy path**) appear only while that row is
   **hovered or selected**, so a resting row shows just the name and its status tag; **right-clicking** any row
   opens the full action menu (view content, copy content for the AI, pre-push lint, refresh, re-scan push
@@ -92,6 +94,11 @@ bottom of the sidebar** (a floating copy), and a **“Low-code project” tab in
 at the top of the panel: it is on by default, turning it off removes the tab from sessions
 immediately, while the settings and sidebar entries stay put. The state lives in `localStorage`
 under `dsh-magical-lowcode-project:project-mode` and syncs across panel instances and browser tabs.
+
+Switching entries or tabs **no longer throws the data away** (since 0.2.15): the tree, every expanded level and
+the push status live in a module-level cache, so a fresh mount shows the previous data at once and re-scans in the
+background; which levels are expanded, the last opened file and the right-pane tab are remembered in `localStorage`
+(`…:expanded` / `…:selected` / `…:detail`), and coming back lists the remembered folder and reopens that file.
 
 UI labels follow the host language: the settings navigation name, the session tab, the sidebar
 button title, the five tab names and the switch row all ship zh/en dictionaries (via

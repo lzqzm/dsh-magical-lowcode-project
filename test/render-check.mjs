@@ -512,6 +512,38 @@ if (!components.has("conversation.view")) {
 	else pass("预检缺失键列表进入面板 state 并渲染成提示");
 }
 
+/* --------------------------------- 10. 状态记忆与模糊查找（0.2.15） */
+
+/**
+ * 用户诉求：① 每次切进低代码工程，之前列出的数据、展开的层级、选中的文件都没了；
+ * ② 列目录要能模糊找文件。钉住：三处记忆键 + 模块缓存恢复路径 + 查找框与递归搜索调用。
+ */
+{
+	if (!/readStoredList\(EXPANDED_KEY\)/.test(clientSource)) fail("TreeTab 的展开层级没有从 EXPANDED_KEY 恢复");
+	else pass("展开层级存 localStorage，重新挂载时恢复");
+
+	if (!/readStoredPath\(SELECTED_KEY\)/.test(clientSource)) fail("上次选中的文件没有从 SELECTED_KEY 读回（切回来右栏是空的）");
+	else pass("选中文件存 localStorage，重新挂载时读回");
+
+	if (!/panelCache\.children instanceof Map/.test(clientSource)) fail("项目树没有走模块级 panelCache（重新挂载会退化成空白树 + 再点一次列出）");
+	else pass("项目树 / 推送状态走模块级 panelCache：挂载即显示，再后台重扫");
+
+	if (!/readStoredPath\(DETAIL_KEY\)/.test(clientSource)) fail("Panel 的右栏页签没有从 DETAIL_KEY 恢复（切回来总是弹回「文件内容」）");
+	else pass("右栏页签存 localStorage，重新挂载时恢复");
+
+	if (!/placeholder: "模糊查找/.test(clientSource)) fail("树栏没有模糊查找输入框");
+	else pass("树栏顶部有模糊查找输入框");
+
+	if (!/call\("projectSearchEntries"/.test(clientSource)) fail("模糊查找没有调用 host 的 projectSearchEntries（深层文件搜不到）");
+	else pass("查找走 host 递归搜索 projectSearchEntries（没展开的层也能命中）");
+
+	if (!/const reveal = useCallback/.test(clientSource)) fail("查找结果点不回去（缺少 reveal 定位助手）");
+	else pass("命中结果可点击：reveal 逐级拉取、展开后定位过去");
+
+	if (!/\.dshml-find\{/.test(clientSource) || !/\.dshml-hitpath\{/.test(clientSource)) fail("缺少 .dshml-find / .dshml-hitpath 样式（查找条与结果路径）");
+	else pass("查找条与结果路径有独立样式（.dshml-find / .dshml-hitpath）");
+}
+
 /* ------------------------------------------------------------------- 输出 */
 
 const line = "-".repeat(72);

@@ -115,7 +115,7 @@ Core packages (`@deepseek-ai/dsh-agent-preset-registry`, `@deepseek-ai/dsh-typer
 ## Permissions and safety boundaries
 
 - File access is **limited to registered workspaces**; paths are normalized before the prefix comparison and anything outside is refused
-- Script execution is whitelisted to `source-*.js` directly under the workspace root, run with the host's own node (`shell: false`); stdout is aborted past 400 000 characters and output is truncated to 20 000
+- Script execution is whitelisted to `source-*.js`, resolved by walking **up from the given directory to the workspace root** (keep the scripts at the workspace root or in a project subdirectory), run with the host's own node (`shell: false`); stdout is aborted past 400 000 characters and output is truncated to 20 000
 - Push state is written to `$DSH_HOME/project-push-state.json` (read migrates from the legacy path once)
 - **The host half makes no outbound network requests**; the HTTP endpoints ride DSH's own authenticated connection channel
 - ⚠️ **The preview page does reach out**: the HTML assembled by `projectAssemblePreview` contains

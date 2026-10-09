@@ -107,7 +107,7 @@ dsh plugin --profile web add dsh-magical-lowcode-project
 ## 权限与安全边界
 
 - 文件访问**只限已注册的工作区**，路径先规范化再与工作区前缀比对，越界直接拒绝
-- 脚本执行有白名单：只允许工作区根目录下的 `source-*.js`，用宿主自带的 node 执行（`shell: false`），stdout 超 400000 字符会被中止，输出截断到 20000 字符
+- 脚本执行有白名单：只允许 `source-*.js`，从传入目录**逐级向上找到工作区根**（脚本放工作区根或工程子目录都行），用宿主自带的 node 执行（`shell: false`），stdout 超 400000 字符会被中止，输出截断到 20000 字符
 - 推送状态文件写在 `$DSH_HOME/project-push-state.json`（读取时兼容从旧路径一次性迁移）
 - **host 半边自身不发起任何对外网络请求**，两条 HTTP 端点走 DSH 自己的 connection 认证通道
 - ⚠️ **预览页会外联**：`projectAssemblePreview` 装配出的 HTML 里含

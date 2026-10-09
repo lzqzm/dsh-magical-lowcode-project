@@ -40,7 +40,7 @@
 | 项目树（左栏） | **工程目录**（任意一层都行，列它的一层子项） | `...\proj` 或 `...\proj\pages` |
 | 推送状态 | **工作区根**（下面要能扫到 `pages/` `apis/` `databases/`，并从此层 `.env` 读 `PROJECT_UUID`） | `...\proj` |
 | 预览与体检 | **页面目录**（该层必须有 `page.json`） | `...\proj\pages\home` |
-| 工程脚本 | **工作区根**（脚本必须直接躺在这一层） | `...\proj` |
+| 工程脚本 | **工作区根**（脚本躺这一层；也可以传它下面的工程子目录 —— 0.2.12 起会自动逐级向上找到工作区根） | `...\proj` 或 `...\proj\<projectUuid>` |
 | 预设包 | 不是路径，是**预设标识符** | `my-agent` |
 
 ### 0.4 前提：目录必须已注册为 DSH 工作区
@@ -283,14 +283,14 @@ PROJECT_NAME=功能验证项目
 
 | 控件 | 调用的 RPC | 行为 |
 | --- | --- | --- |
-| 路径输入框 | — | placeholder：`工作区绝对路径（脚本必须直接位于该目录下）` |
+| 路径输入框 | — | placeholder：`工作区绝对路径（脚本可在这一层，也可在工作区根）` |
 | 脚本名输入框 | — | **默认值是 `source-page-push.js`**，placeholder `source-xxx.js`。⚠️ 想跑别的脚本必须手动改这一格 |
 | 参数输入框 | — | placeholder：`参数（空格分隔，可留空）`；按空白拆成数组传给脚本 |
 | **运行** | `projectRunScript(script, args, cwd)` | 见下 |
 
 执行的硬边界（host 侧）：
 
-- 脚本名必须匹配白名单 `/^source-[a-z0-9-]+\.js$/`，且必须**直接位于 `cwd` 这一层**（放子目录里不会被找到）；
+- 脚本名必须匹配白名单 `/^source-[a-z0-9-]+\.js$/`；脚本要**直接躺在某一层目录里**（放子目录里不会被找到）。查找从传入的 `cwd` 开始**逐级向上**，最远到该路径所属的**注册工作区根**为止 —— MagicalCoder 的 localdev 布局把 `source-*.js` 放在工作区根（`localdev\source-page-push.js`），而面板里的「工程目录」只是它下面的工程子目录（`localdev\<projectUuid>`），所以这种布局下脚本会被自动找到；从 `cwd` 一路找到工作区根都没有时，报 `script-not-found` 并提示应放的位置；
 - 用**宿主自带的 node** 执行（`process.execPath`），`shell: false`，所以不依赖系统 PATH；
 - `stdout` 累计超过 400000 字符会被中止，最终输出截断到 20000 字符；
 - 每次运行前会自动清理上次异常退出遗留的 `.temp_page_push_*` / `.temp_api_push_*` 目录；
@@ -301,7 +301,7 @@ PROJECT_NAME=功能验证项目
 1. 路径填 `D:\project\PythonWorkSpace\AI学习\MagicalCoder平台插件话\.dsh-verify\proj`。
 2. **把脚本名那一格从默认的 `source-page-push.js` 改成 `source-hello.js`**（这个工程里只有这一个脚本，内容是 `console.log('hello from source script');`）。
 3. 参数留空，点**运行** → 预期 `成功（exit code 0）`，输出区出现 `hello from source script`。
-4. 反面案例：脚本名保持默认 `source-page-push.js` 直接点运行 → 因为该文件不存在，会看到失败/找不到脚本类的错误（这正是白名单 + 存在性检查在起作用）。
+4. 反面案例：脚本名填一个**从传入目录一路到工作区根都没有**的名字（例如 `source-nope.js`）→ 报 `script-not-found`，错误里会写明应该把脚本放在哪个工作区根下。
 5. 再接一个反面案例：脚本名填 `../../evil.sh` → 被白名单挡下（`script-not-allowed`）。
 
 ---
@@ -376,6 +376,7 @@ PROJECT_NAME=功能验证项目
 | `forbidden` | 没有访问权限（EACCES/EPERM） | 检查目录权限，或换个位置 |
 | `not-a-page-or-api` | 体检时该目录既无 `page.json` 也无 `meta.json` | 把路径指到真正的页面目录或接口目录 |
 | `script-not-allowed` | 脚本名不在 `source-*.js` 白名单内 | 用工程自己的 `source-xxx.js` |
+| `script-not-found` | 从传入目录一路到工作区根都没有这个脚本（0.2.12 起错误里会写明应放的位置） | 把 `source-xxx.js` 放到工作区根，或放到路径框里填的那一层 |
 | 导入预设返回 409 | 已存在同名预设 | 换一个标识符再导 |
 | 导出预设返回 404 | 没有这个预设 id（0.2.0 起内置预设也能导出，旧的 403 分支已删除） | 用「设置 → Agent 预设」里看到的那串 id 再试 |
 | 「主机侧 RPC 不可用」 | 客户端拿不到 host 的 RPC 句柄 | 多半是 host 半边没加载成功（`dsh --profile <p> --dump-config` 里查有没有 `- id: dsh-magical-lowcode-project`） |

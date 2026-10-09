@@ -200,6 +200,11 @@ else {
 	if (/from\s+["'](\.[^"']*)["']/.test(hostSource) || /import\s*\(\s*["']\.[^"']*["']\s*\)/.test(hostSource)) fail("lib/index.js 不应有相对路径 import（会被打包成硬编码路径）");
 	if (hostSource.includes("dsh-desktop-project:")) fail("lib/index.js 里仍残留 dsh-desktop-project: 前缀的 effect 标签");
 
+	// 脚本目录解析：面板里的「工程目录」通常是工作区下的工程子目录，而 source-*.js
+	// 放在工作区根（MagicalCoder localdev 布局）。projectRunScript 必须能向上找到它。
+	if (!hostSource.includes("insideWorkspace(") || !hostSource.includes("scriptDir")) fail("lib/index.js 的 projectRunScript 需支持从工程目录向上找到工作区根里的 source-*.js（0.2.12 修复推送 MODULE_NOT_FOUND）");
+	else pass("projectRunScript 支持向上解析脚本目录（工程目录 → 工作区根）");
+
 	// 12 个 remote 方法必须都在类里定义
 	const listMatch = hostSource.match(/for \(const remoteMethod of \[([\s\S]*?)\]\)/);
 	if (listMatch === null) fail("找不到 remoteMethod 注册循环");

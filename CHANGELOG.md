@@ -3,6 +3,18 @@
 本文件只记面向使用者的变更。插件市场在「更新内容」处会展示版本说明或提交记录，
 所以每个版本都留一条。
 
+## 0.2.12
+
+修推送/下拉报 `Cannot find module '…\<工程目录>\source-page-push.js'`：脚本其实不在工程目录里。
+
+- **修：脚本目录会向上找。** MagicalCoder localdev 布局把 `source-*.js` 放在**工作区根**
+  （`localdev\source-page-push.js`），面板里的「工程目录」只是工作区下的工程子目录
+  （`localdev\<projectUuid>`，里面只有 `pages/apis/databases/.env`）。`projectRunScript` 现在从传入目录
+  逐级向上找同名脚本，最远走到该路径所属的**注册工作区根**（不越界），找到后以脚本所在目录
+  作为 `cwd` 运行；到处都没有时抛 `script-not-found` 并提示应放的位置。
+- **改：残留清理跟着脚本目录走。** `.temp_page_push_*` / `.temp_api_push_*` 的清理目录由工程目录改为脚本目录。
+- **改：host 自检补一条断言。** `projectRunScript` 必须保留向上解析逻辑（32 → 33 项）。
+
 ## 0.2.11
 
 树里的「● 待推送」改成红色，扫一眼就知道哪些还没推。

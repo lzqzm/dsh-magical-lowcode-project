@@ -222,6 +222,8 @@ const TABS = [
 	{ key: "script", label: "工程脚本" },
 	{ key: "preset", label: "预设包" },
 ];
+/** 页签 Pill 的标签集合：脚本页签里还有一组快捷脚本 Pill，用标签把两组分开。 */
+const TAB_LABELS = new Set(TABS.map((t) => t.label));
 
 if (typeof SettingsSection === "function") {
 	let firstTree;
@@ -243,7 +245,8 @@ if (typeof SettingsSection === "function") {
 		walk(tree, (n) => {
 			if (n.kind === "host") {
 				hosts.add(n.name);
-				if (n.name === primitivesStub.Pill) pills.push(n);
+				/* 只认页签 Pill；脚本页签里的快捷脚本 Pill 由下面的专项断言负责。 */
+				if (n.name === primitivesStub.Pill && TAB_LABELS.has(textOf(n))) pills.push(n);
 			}
 		});
 		if (pills.length !== TABS.length) {
@@ -256,6 +259,15 @@ if (typeof SettingsSection === "function") {
 			continue;
 		}
 		pass(`设置页 active="${tab.key}" 渲染成功（${hosts.size} 种宿主元素，页签 ${labels.join("/")}）`);
+
+		if (tab.key === "script") {
+			const quick = [];
+			walk(tree, (n) => {
+				if (n.kind === "host" && n.name === primitivesStub.Pill && !TAB_LABELS.has(textOf(n))) quick.push(textOf(n));
+			});
+			if (quick.length !== 6) fail(`脚本页签应有 6 个快捷脚本入口，实际 ${quick.length} 个`);
+			else pass(`脚本页签渲染出 6 个快捷脚本入口（${quick.join("/")}）`);
+		}
 
 		/* 各页签至少要渲染出自己的内容，而不是空白。 */
 		const tabNodes = [];

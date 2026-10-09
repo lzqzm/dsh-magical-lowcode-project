@@ -14,7 +14,7 @@ A MagicalCoder-style low-code project follows a set of conventions: pages are a 
 
 In a plain editor these conventions live in your head. This plugin turns them into:
 
-- a **visible project tree** (one directory level + files, with push-status marks)
+- a **visible project tree** (multi-level, expanded on demand, with inline push-status marks)
 - **executable checks** (pre-push lint, encoding the mistakes we kept making as rules V1.01–V1.06)
 - a **preview you can actually look at** (assemble a page in a sandbox without pushing it to the platform)
 - a **push-status ledger** (which pages/APIs are in sync with the platform and which are dirty)
@@ -48,19 +48,24 @@ Every RPC that takes a path verifies it resolves **inside a registered workspace
 | `POST /api/agent-preset.import` | Import **preview**: validate the package and return a dry-run report |
 | `POST /api/agent-preset.import?agentPreset=<id>&install=1` | Validate then **atomically install** (409 on name conflict, never overwrites) |
 
-Package limits: ≤16 MB compressed, ≤32 MB uncompressed, ≤12 MB per file, ≤512 files. Absolute paths, `..` traversal, backslash paths, and symlinks are rejected. Only `trust === "user"` custom presets can be exported.
+Package limits: ≤16 MB compressed, ≤32 MB uncompressed, ≤12 MB per file, ≤512 files. Absolute paths, `..` traversal, backslash paths, and symlinks are rejected. Since 0.2.0 both built-in and custom presets are just a declaration line in the profile patch — there is no `trust` distinction, so built-in presets can be exported too.
 
 ### Web panel (client half)
 
 A panel inside the DSH Web UI with five tabs:
 
-- **Project tree** — browse the project, rename/delete entries, read files and edit them in place
+- **Project tree** — browse the project **multi-level** (click a directory to expand it; that level is fetched only then); every row carries an inline `● dirty` / `✔ pushed` mark, and dirty rows offer **↑ push** / **↓ pull** right there; read, edit and save files in place, rename/delete/copy paths, and give a 32-char UUID project directory a display name
 - **Push status** — see at a glance what changed but has not been pushed; mark pushed, reset, set a display project name
 - **Preview & checkup** — assemble a sandbox preview (opens in a new tab), run the lint and list problems
-- **Project scripts** — run a `source-*.js` from the workspace root with arguments, echoing exit code, command and output
+- **Project scripts** — run a `source-*.js` from the workspace root (six ready-made shortcuts) with arguments, echoing exit code, command and output
 - **Preset packages** — export/import `.dshpreset`
 
+Both pull and push go through a **command-preview confirmation**: the exact `node source-*.js …` command is
+shown first (pull carries an overwrite warning), and only then does it run. A successful pull clears the push
+ledger (the local files were just overwritten from the platform); a successful push marks that target as pushed.
+
 Plus a sidebar shortcut (a floating copy of the same panel).
+
 
 ## Install
 

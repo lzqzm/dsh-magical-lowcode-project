@@ -89,7 +89,7 @@ const requireStub = (specifier) => {
 
 /* --------------------------------------------- 3. apply 一遍，截下两个注册组件 */
 
-function makeCtx() {
+function makeCtx(options = {}) {
 	const registers = [];
 	const slots = {
 		inject(key, callback) {
@@ -110,6 +110,7 @@ function makeCtx() {
 		get(name) {
 			if (name === "slots") return slots;
 			if (name === "remote.desktopProject") return { __rpc: true };
+			if (name === "locale" && options.locale !== undefined) return options.locale;
 			return undefined;
 		},
 		effect(execute) {
@@ -335,6 +336,101 @@ if (typeof SidebarAction === "function") {
 			if (!comps.includes("Panel")) fail("Modal 里没有渲染 Panel");
 			else pass("侧边栏 Modal 内嵌 Panel（同一面板的浮层副本）");
 		}
+	}
+}
+
+/* ---------------------------------------------- 7. 工程模式开关 → 会话页签 */
+
+const MODE_KEY = "dsh-magical-lowcode-project:project-mode";
+
+if (!components.has("conversation.view")) {
+	fail("默认应当注册 conversation.view（工程模式默认开启）");
+} else {
+	pass("默认注册 conversation.view（工程模式默认开启）");
+	const ProjectView = components.get("conversation.view");
+	if (typeof ProjectView === "function") {
+		try {
+			useStateCallIndex = 0;
+			activeOverride = undefined;
+			const tree = render(reactStub.createElement(ProjectView, {}));
+			const names = [];
+			walk(tree, (n) => {
+				if (n.kind === "component") names.push(n.name);
+			});
+			if (!names.includes("Panel")) fail("会话视图里没有渲染 Panel");
+			else pass("会话视图渲染出 Panel（与设置页共用同一个面板）");
+			if (!names.includes("TreeTab")) fail("会话视图首屏没有落在「项目树」页签");
+			else pass("会话视图首屏默认落在「项目树」页签");
+			const texts = textOf(tree);
+			if (!texts.includes("工程模式：开")) fail(`会话视图没有渲染工程模式开关行（文本：${texts.slice(0, 80)}）`);
+			else pass("会话视图顶部渲染出「工程模式：开」开关行");
+		} catch (error) {
+			fail(`渲染会话视图抛错：${error?.message ?? error}`);
+		}
+	}
+}
+
+{
+	store.set(MODE_KEY, "off");
+	const probe = makeCtx();
+	try {
+		await exported.apply(probe.ctx);
+	} catch (error) {
+		fail(`工程模式关闭时 apply 抛错：${error?.message ?? error}`);
+	}
+	const names = probe.registers.map((r) => r.contribution?.name);
+	if (names.includes("conversation.view")) fail("工程模式关闭后仍然注册了 conversation.view");
+	else pass("工程模式关闭后不再注册 conversation.view（其余两个入口不受影响）");
+	if (!names.includes("settings.section") || !names.includes("sidebar.footer.action")) {
+		fail(`工程模式关闭时两个固定入口丢了（实际 [${names.join(", ")}]）`);
+	} else pass("工程模式关闭时 settings.section 与 sidebar.footer.action 仍在");
+	store.delete(MODE_KEY);
+}
+
+/* ------------------------------------------------- 8. locale 服务存在时换绑 */
+
+{
+	const registered = [];
+	const bound = [];
+	const localeStub = {
+		register(ns, messages) {
+			registered.push({ ns, messages });
+		},
+		bind(ns) {
+			bound.push(ns);
+			return (key) => `en:${key}`;
+		},
+	};
+	const probe = makeCtx({ locale: localeStub });
+	try {
+		await exported.apply(probe.ctx);
+	} catch (error) {
+		fail(`带 locale 服务时 apply 抛错：${error?.message ?? error}`);
+	}
+	const entry = registered.find((r) => r.ns === "dsh-magical-lowcode-project");
+	if (entry === undefined) {
+		fail("apply 没有向 locale 注册本插件的命名空间与字典");
+	} else {
+		const zh = entry.messages?.zh ?? {};
+		const en = entry.messages?.en ?? {};
+		const missing = Object.keys(zh).filter((key) => en[key] === undefined);
+		if (Object.keys(zh).length === 0) fail("中文字典是空的");
+		else if (missing.length > 0) fail(`英文字典缺 ${missing.length} 条：${missing.slice(0, 6).join(", ")}`);
+		else pass(`locale 注册命名空间（zh/en 各 ${Object.keys(zh).length} / ${Object.keys(en).length} 条，键一一对应）`);
+	}
+	if (bound.length === 0) {
+		fail("apply 没有调用 locale.bind");
+	} else {
+		const section = probe.registers.find((r) => r.contribution?.name === "settings.section");
+		const sectionLabel = section?.contribution?.label;
+		const sectionText = typeof sectionLabel === "function" ? sectionLabel() : sectionLabel;
+		if (sectionText !== "en:entry.title") fail(`settings.section 的 label 没跟着 locale 换绑（实际 ${JSON.stringify(sectionText)}）`);
+		else pass("settings.section 的 label 跟着 locale 换绑（函数型 label + locale: NS）");
+		const view = probe.registers.find((r) => r.contribution?.name === "conversation.view");
+		const viewLabel = view?.contribution?.label;
+		const viewText = typeof viewLabel === "function" ? viewLabel() : viewLabel;
+		if (viewText !== "en:view.project") fail(`conversation.view 的 label 没跟着 locale 换绑（实际 ${JSON.stringify(viewText)}）`);
+		else pass("conversation.view 的 label 跟着 locale 换绑");
 	}
 }
 

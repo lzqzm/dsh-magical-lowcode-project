@@ -52,7 +52,8 @@ Package limits: ≤16 MB compressed, ≤32 MB uncompressed, ≤12 MB per file, �
 
 ### Web panel (client half)
 
-A panel inside the DSH Web UI with five tabs:
+A panel inside the DSH Web UI with five tabs (shared by **three entries**: the settings section,
+the sidebar overlay, and a session tab):
 
 - **Project tree** — browse the project **multi-level** (click a directory to expand it; that level is fetched only then); every row carries an inline `● dirty` / `✔ pushed` mark, and dirty rows offer **↑ push** / **↓ pull** right there; **right-clicking** any row opens the full action menu (view content, copy content for the AI, pre-push lint, refresh, re-scan push status, edit environment config, copy absolute/relative path, rename, delete — inapplicable entries are greyed out instead of hidden); read, edit and save files in place, give a 32-char UUID project directory a display name, and edit the workspace root `.env` (`SERVER_URL` / `PROJECT_UUID`) straight from the toolbar
 - **Push status** — see at a glance what changed but has not been pushed; mark pushed, reset, set a display project name
@@ -69,7 +70,17 @@ a matching line is replaced in place (keeping its indent and `export ` prefix), 
 while comments and every other line stay untouched; values containing whitespace or `#` are quoted. When the
 file does not exist yet, the dialog says that saving will create it.
 
-Plus a sidebar shortcut (a floating copy of the same panel).
+Three entries share the same panel: **Settings → Low-code project mode**, the **`▤` button at the
+bottom of the sidebar** (a floating copy), and a **“Low-code project” tab inside a session**
+(`slot: conversation.view`, `order: 20`). The session tab is controlled by the **project-mode switch**
+at the top of the panel: it is on by default, turning it off removes the tab from sessions
+immediately, while the settings and sidebar entries stay put. The state lives in `localStorage`
+under `dsh-magical-lowcode-project:project-mode` and syncs across panel instances and browser tabs.
+
+UI labels follow the host language: the settings navigation name, the session tab, the sidebar
+button title, the five tab names and the switch row all ship zh/en dictionaries (via
+`locale.register` + `locale.bind` when the `locale` service is available, falling back to the
+built-in Chinese otherwise). Long explanatory copy inside the panel is still Chinese-only.
 
 
 ## Install

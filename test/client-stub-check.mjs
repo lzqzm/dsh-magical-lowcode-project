@@ -176,8 +176,12 @@ if (registration !== undefined) {
 					if (!record.gets.includes("slots")) fail('apply 从未查询服务 "slots"');
 					else pass(`apply 查询了 slots（共 ${record.gets.length} 次 get）`);
 
-					/* 3.3 slot 注册 */
-					const expectedSlots = ["settings.section", "sidebar.footer.action"];
+					/*
+					 * 3.3 slot 注册。第三个 conversation.view 由「工程模式」开关动态挂载
+					 * （apply 里的 ctx.effect → slots.inject("conversation.view", …)），
+					 * 桩 ctx.effect 是立即执行，所以这里同样能看到它。
+					 */
+					const expectedSlots = ["settings.section", "sidebar.footer.action", "conversation.view"];
 					if (record.injects.join() !== expectedSlots.join()) {
 						fail(`slots.inject 的 key 应为 [${expectedSlots.join(", ")}]，实际 [${record.injects.join(", ")}]`);
 					} else pass(`slots.inject 命中 ${expectedSlots.join(" + ")}`);
@@ -212,15 +216,17 @@ if (registration !== undefined) {
 							}
 						}
 						const section = byName.get("settings.section");
-						if (section !== undefined && typeof section.contribution.label !== "string") {
-							fail("settings.section 必须带 label（设置页的导航名）");
+						/* label 允许 string（不随语言变）或函数（locale 绑定；官方 settings.section 就是函数）。 */
+						const sectionLabel = section === undefined ? undefined : section.contribution.label;
+						if (sectionLabel !== undefined && typeof sectionLabel !== "string" && typeof sectionLabel !== "function") {
+							fail(`settings.section 的 label 必须是 string 或函数，实际 ${typeof sectionLabel}`);
 							allOk = false;
 						}
-						if (allOk) pass("两个 slot 的 contribution 字段齐全、组件可调用、且都经 slots.inject 包裹");
+						if (allOk) pass(`${expectedSlots.length} 个 slot 的 contribution 字段齐全、组件可调用、且都经 slots.inject 包裹`);
 					}
 
-					/* 3.4 清理：disposer 由 slots.inject 负责，本插件不再自建 ctx.effect。 */
-					if (record.effects.length !== 0) info(`apply 建立了 ${record.effects.length} 条 ctx.effect（当前实现预期为 0）`);
+					/* 3.4 清理：会话页签的挂载/摘除由一条 ctx.effect 管着，其余 disposer 交给 slots.inject。 */
+					if (record.effects.length !== 1) info(`apply 建立了 ${record.effects.length} 条 ctx.effect（当前实现预期为 1：conversation.view 的开关）`);
 				}
 			}
 		}

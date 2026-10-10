@@ -34,14 +34,23 @@ dsh-project-panel/
   那三个**还没移植**的 RPC：`projectSetProjectName` / `projectAssemblePreview` /
   `projectRenameEntry` —— 要接着做就按上面的地址重新 clone 一份。
 
+  ⚠ 那个 `magical-src` 的地址要打折扣看：**这个仓库后来被改名成
+  `https://github.com/lzqzm/dsh-project-panel`，内容也被本插件整体覆盖了**（commit
+  `5deb8fa`）。当时 clone 的 `b5f5f20` 是它的前身 —— 一个 0.2.28 的旧版实现，
+  git 历史里还在，想对照得 `git show b5f5f20:lib/index.js`。
+
 （`_dbg/scriptbak/` 是平台脚本改造前的备份，连同 `_dbg/` 一起移除了；脚本本体在
 `scaffold/` 里。）
 
-装进 profile：
+装进 profile，两种装法：
 
 ```
-dsh plugin --profile web add <本仓库的绝对路径>
+dsh plugin --profile web add github:lzqzm/dsh-project-panel   # 从仓库装：市场能给一键更新
+dsh plugin --profile web add <本仓库的绝对路径>                # link: 装本地这份：改代码即时生效
 ```
+
+仓库名在 2026-10 从 `dsh-magical-lowcode-project` 改成了 `dsh-project-panel`；旧地址
+GitHub 会 301 重定向，所以按旧名装过的机器照样能用，只是依赖里那行 spec 是旧字符串。
 
 `link:` 安装不装传递依赖，所以**两个半边都不许 import 第三方包，也不许
 import `@deepseek-ai/*`**（Node 从插件真实路径向上解析，够不到

@@ -1,15 +1,14 @@
 {
-  "name": "dsh-magical-lowcode-project",
-  "version": "0.2.28",
-  "description": "DeepSeek Harness 低代码工程模式插件：工作区项目文件树、推送状态(push status)、脚本运行、页面预览装配、推送前静态校验(lint) 的 host RPC，加插件自带 Web 面板（设置页 / 侧栏浮层 / 会话页签三处入口，受工程模式开关控制，入口层中英双语）与 Agent 预设包(.dshpreset)导入导出端点。Low-code project mode plugin for DeepSeek Harness.",
+  "name": "dsh-project-panel",
+  "version": "0.1.0",
+  "description": "DSH 工程面板：把低代码工程目录树搬进 web 端 —— 左栏常驻图标 + 中栏工程浏览器（多级文件树 / 推送状态 / 文件内容）。",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
-    "./package.json": "./package.json",
-    "./locale/*.json": "./locale/*.json"
+    "./package.json": "./package.json"
   },
   "dsh": {
     "bundle": {
@@ -21,8 +20,8 @@
   },
   "dshhub": {
     "schemaVersion": 1,
-    "displayName": "低代码工程模式",
-    "summary": "把 MagicalCoder 风格低代码工程目录搬进 DSH：项目文件树、page/api 推送状态、source-*.js 脚本运行、页面预览沙箱装配、推送前静态校验(V1.01~V1.06)，以及 Agent 预设包 .dshpreset 的导入导出。",
+    "displayName": "工程面板",
+    "summary": "把低代码工程目录搬进 DSH Web 侧栏：多级文件树、推送状态账本、源码编辑、推送前静态校验、工程脚本运行，以及空白目录一键开局。",
     "categories": [
       "开发工具",
       "Web UI",
@@ -32,11 +31,6 @@
       "host",
       "web"
     ],
-    "capabilities": {
-      "provides": [
-        "service:desktopProjectController"
-      ]
-    },
     "compatibility": {
       "dsh": ">=0.2.0-0",
       "node": "^22.19.0 || >=24.0.0"
@@ -49,12 +43,11 @@
   },
   "files": [
     "lib",
+    "src",
+    "scaffold",
     "cordis.patch.yml",
-    "locale",
     "README.md",
-    "README.zh.md",
-    "CHANGELOG.md",
-    "LICENSE"
+    "NOTES.md"
   ],
   "keywords": [
     "deepseek",
@@ -62,13 +55,10 @@
     "dsh",
     "dsh-plugin",
     "client-plugin",
+    "project-panel",
     "lowcode",
-    "low-code",
     "magicalcoder",
-    "project-mode",
-    "workspace",
-    "lint",
-    "preset"
+    "workspace"
   ],
   "license": "MIT",
   "repository": {
@@ -79,32 +69,26 @@
     "node": "^22.19.0 || >=24.0.0",
     "dsh": ">=0.2.0-0"
   },
-  "os": [
-    "darwin",
-    "linux",
-    "win32"
-  ],
-  "dependencies": {
-    "fflate": "0.8.3",
-    "yaml": "^2.9.1"
-  },
-  "peerDependencies": {
-    "@deepseek-ai/dsh-agent-preset-registry": "^0.2.0-0",
-    "@deepseek-ai/dsh-typert-protocol": "^0.2.0-0"
-  },
-  "peerDependenciesMeta": {
-    "@deepseek-ai/dsh-agent-preset-registry": {
-      "optional": true
-    }
-  },
   "scripts": {
-    "test": "node test/verify.mjs && node test/client-stub-check.mjs && node test/render-check.mjs && node test/preset-check.mjs && node test/env-check.mjs && node test/search-check.mjs",
-    "test:smoke": "node test/smoke.mjs",
-    "test:client": "node test/client-stub-check.mjs",
-    "test:render": "node test/render-check.mjs",
-    "test:preset": "node test/preset-check.mjs",
-    "test:env": "node test/env-check.mjs",
-    "test:search": "node test/search-check.mjs",
-    "prepublishOnly": "node test/verify.mjs && node test/client-stub-check.mjs && node test/render-check.mjs && node test/preset-check.mjs && node test/env-check.mjs && node test/search-check.mjs"
+    "build:editor": "esbuild src/editor.js --bundle --format=iife --target=es2022 --minify --legal-comments=none --outfile=lib/client.editor.js",
+    "watch:editor": "esbuild src/editor.js --bundle --format=iife --target=es2022 --minify --legal-comments=none --outfile=lib/client.editor.js --watch"
+  },
+  "devDependencies": {
+    "@codemirror/lang-css": "^6.3.1",
+    "@codemirror/lang-html": "^6.4.12",
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/lang-json": "^6.0.2",
+    "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/lang-python": "^6.2.1",
+    "@codemirror/theme-one-dark": "^6.1.3",
+    "codemirror": "^6.0.2",
+    "esbuild": "^0.28.2"
+  },
+  "//dependencies": "这一组不是 lib/index.js 自己 import 的，而是插件自带脚手架（scaffold/ 里的 source-*.js）要用的。铺到没有 node_modules 的目录后，靠 NODE_PATH 指到插件这一份复用，省掉每个新目录一次 npm install。版本范围照抄平台下发的 localdev/package.json。",
+  "dependencies": {
+    "archiver": "^6.0.0",
+    "axios": "^1.6.0",
+    "form-data": "^4.0.6",
+    "unzipper": "^0.10.0"
   }
 }

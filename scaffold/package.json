@@ -1,0 +1,21 @@
+{
+  "name": "magicalcoder-localdev",
+  "version": "1.0.0",
+  "description": "MagicalCoder Local Development Tools",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "magicalcoder",
+    "lowcode"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "archiver": "^6.0.0",
+    "axios": "^1.6.0",
+    "form-data": "^4.0.6",
+    "unzipper": "^0.10.0"
+  }
+}

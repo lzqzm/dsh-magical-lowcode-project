@@ -1,231 +1,255 @@
-# dsh-magical-lowcode-project
+# dsh-project-panel · 工程面板
 
-> A DeepSeek Harness plugin: **low-code project mode** — manage a MagicalCoder-style low-code project right inside your DSH workspace.
+> DeepSeek Harness Web 端的**低代码工程面板**：把 MagicalCoder 风格的工程目录搬进会话侧栏 —— 文件树、推送状态、源码编辑、推送前校验、工程脚本，一处看全。
 
-Project file tree, push status, project scripts, page preview assembly, pre-push lint, and Agent preset (`.dshpreset`) import/export — all in a panel that ships with the plugin.
+MagicalCoder 风格的工程是一套约定目录：页面由 `page.json` + `index.html` + `page.js` 三件套组成，接口是 `meta.json`，工程脚本叫 `source-*.js`，页面里必须有 `magicalDragScene` 容器，调平台接口要走 `/magical_lowcode/` 前缀……这些约定在普通编辑器里全靠记性和手工核对。
 
-This is a **host + client** plugin: the host half exposes 12 RPCs and 2 HTTP endpoints, and the client half renders its own panel in the DSH Web UI. It **patches no `@deepseek-ai/*` core package**.
+这个插件把它们变成看得见、点得动的东西。
+
+- **看得见的工程树** —— 一层目录一层文件，就地读写、改名、移动、删除
+- **推送状态账本** —— 哪些页面 / 接口已经同步到平台，哪些改过还没同步
+- **推送前静态校验** —— 把踩过的坑变成规则，推之前先跑一遍
+- **源码页签** —— 树里点一下就开，带高亮和多标签，改完直接写回
+- **工程脚本入口** —— 工作区根目录下那批 `source-*.js`，在面板里点着跑
+- **空白目录也能开局** —— 服务器地址 / 账号 / 项目由面板维护，不依赖工作区里事先有 `.env`
 
 ---
 
-## What it solves
+## 一、安装
 
-A MagicalCoder-style low-code project follows a set of conventions: pages are a `page.json` + `index.html` + `page.js` trio, APIs live in `meta.json`, project scripts are named `source-*.js`, a page must contain a `magicalDragScene` container, and platform calls should go through the `/magical_lowcode/openapi/` prefix.
+从插件市场装（推荐）：
 
-In a plain editor these conventions live in your head. This plugin turns them into:
+```
+在 DSH 插件市场里搜「工程面板」或 dsh-project-panel
+```
 
-- a **visible project tree** (multi-level, expanded on demand, with inline push-status marks)
-- **executable checks** (pre-push lint, encoding the mistakes we kept making as rules V1.01–V1.06)
-- a **preview you can actually look at** (assemble a page in a sandbox without pushing it to the platform)
-- a **push-status ledger** (which pages/APIs are in sync with the platform and which are dirty)
+命令行装：
 
-## Features
+```bash
+dsh plugin --profile web add github:lzqzm/dsh-magical-lowcode-project
+```
 
-### Project-mode RPCs (host half, `desktopProject/*`)
+本地开发（`link:` 安装，装的是你正在改的那份源码）：
 
-| RPC | Purpose |
+```bash
+dsh plugin --profile web add D:\path\to\dsh-project-panel
+```
+
+装完重启 `dsh web`。
+
+### 改了代码怎么生效
+
+| 改了哪 | 要做什么 |
 | --- | --- |
-| `listProjectEntries` | One directory level of the project tree, restricted to a registered workspace |
-| `projectPushStatus` | Scan push status (`page.json` uuid / `meta.json` id, compared against mtime snapshots) |
-| `projectRunScript` | Run a project script (whitelisted to `source-*.js`) |
-| `projectMarkPushed` | Mark an entry as pushed (recursively updates ancestor/descendant snapshots) |
-| `projectResetPushState` | Reset all push state |
-| `projectRenameEntry` | Rename an entry (retries with backoff on Windows EPERM/EBUSY, rewrites `page.json` / `meta.json`) |
-| `projectSetProjectName` | Set a display-only project name (stored in `.dsh-project-names.json`) |
-| `projectDeleteEntry` | Delete an entry (refuses to delete the workspace root) |
-| `projectReadFile` | Read a file as UTF-8 (2 MB per file) |
-| `projectWriteFile` | Write a file as UTF-8 |
-| `projectAssemblePreview` | Assemble a page preview sandbox (inlines the trio + platform runtime) |
-| `projectLint` | Pre-push static lint (rules V1.01–V1.06) |
+| `lib/client.js` | 刷新页面 |
+| `lib/index.js`（host 半边） | 重启 `dsh web` |
+| `src/editor.js` | `npm run build:editor`，再刷新页面 |
 
-Every RPC that takes a path verifies it resolves **inside a registered workspace**; otherwise it fails with `path-outside-workspace`.
+---
 
-### Agent preset endpoints (host half, connection-authenticated fetch routes)
+## 二、入口在哪
 
-| Endpoint | Purpose |
+左侧栏底部的 **「工程」** 按钮，或者右侧栏的 **工程** 页签。打开后占用中栏，会话与输入框保持原样。
+
+面板顶部是搜索框，下面四个页签：
+
+| 页签 | 干什么 |
 | --- | --- |
-| `GET /api/agent-preset.export?agentPreset=<id>` | Export a `.dshpreset` package (ZIP with `manifest.json` + `preset/`) |
-| `POST /api/agent-preset.import` | Import **preview**: validate the package and return a dry-run report |
-| `POST /api/agent-preset.import?agentPreset=<id>&install=1` | Validate then **atomically install** (409 on name conflict, never overwrites) |
+| **文件树** | 工程目录的总览 + 推送状态 |
+| **源码** | 打开的文件，多标签，可编辑 |
+| **校验** | 推送前静态校验的结果清单 |
+| **脚本** | 连接配置 + 工程脚本的运行面板 |
 
-Package limits: ≤16 MB compressed, ≤32 MB uncompressed, ≤12 MB per file, ≤512 files. Absolute paths, `..` traversal, backslash paths, and symlinks are rejected. Since 0.2.0 both built-in and custom presets are just a declaration line in the profile patch — there is no `trust` distinction, so built-in presets can be exported too.
+---
 
-### Web panel (client half)
+## 三、文件树
 
-The DSH Web UI gets a **project browser**: a **persistent multi-level tree on the left**, a **detail area on
-the right** (five tabs: file content / preview & checkup / push status / project scripts / preset packages),
-and a shared path box plus toolbar on top. All **three entries** (settings section, sidebar overlay, session
-tab) share this one browser.
+### 徽章怎么读
 
-- **Left · Project tree** — browse the project **multi-level** (click a directory to expand it; that level is
-  fetched only then); a **fuzzy find box** sits on top of the tree: it searches the whole project folder
-  recursively and matches subsequences (「备管」finds 「备件管理」, `spp` finds `source-page-push.js`); an entry is listed
-  only when its name **or** its relative path matches (typing `index.html` no longer drags in `page.js` from the same
-  folder), and clicking a hit expands the tree down to it; every row carries an inline `● dirty` / `✔ pushed` mark; the row action buttons
-  (**↑ push** / **↓ pull** / **✏ project name** / **view** / **📋 copy path**) appear only while that row is
-  **hovered or selected**, so a resting row shows just the name and its status tag; **right-clicking** any row
-  opens the full action menu (view content, **reference into the composer (let the AI edit it)**, copy content for the AI, pre-push lint, refresh, re-scan push
-  status, copy absolute/relative path, rename, delete — inapplicable entries are
-  greyed out instead of hidden; the duplicated **edit environment config** entry was removed in 0.2.27, the toolbar button is the single entry now). Clicking a file name opens it in **the right pane's “File content” tab** for
-  editing and saving; a 32-char UUID project directory can be given a display name; the toolbar's
-  **environment config** edits the `.env` the `source-*.js` scripts actually load (since 0.2.26 the host's
-  `projectResolveEnv` locates the script folder's layer first; four keys, and since 0.2.28 the dialog just states
-  that this is the file the scripts read, flagging only a project id that does not match the project folder name)
-- **Right · File content** — the selected file opens **read-only**; **selection is computed by the plugin line by line** (native text selection is disabled in the viewer — that is the drag path that deadlocks the renderer): click a line to set the start, drag or Shift+click another to set the end, the selected lines highlight, then **copy selection**, **send to AI** (path + line range + selected lines + an empty "my request" slot — since 0.2.23 these are written **straight into the conversation input box** when the panel lives in a conversation tab, and fall back to the clipboard in the settings page / sidebar overlay), or **edit this range** (just those lines land in a small text area and are spliced back by line number, the rest of the file untouched); **copy all** still copies the whole file; since 0.2.23 **"reference into the composer" hands the whole file to the AI by path** — the toolbar and the tree's right-click menu (files and folders alike) insert `@<absolute path>` into the conversation input box through the session slot's public `inputActions` face (plain `@path` text, equivalent to an @-reference chip but never rejected for a missing chip owner), and fall back to the clipboard when that face is unavailable; press **edit** for the editor — read-only by default since 0.2.19 so a long drag-selection never lands on the editable path browsers deadlock on. Since 0.2.23 the fastest way to change a line or two is to **double-click it**: the line turns into a single-line input and Enter or blur writes back just that line (a one-line box cannot start the long drag-selection browsers deadlock on, so neither "the editor is too small" nor the freeze applies), and a single selected line also offers **edit this line**. Since 0.2.21 **the editor is paginated** (default `EDITOR_PAGE_LINES = 120`) and since 0.2.23 **the page size is yours: 120 / 300 / 1000 / whole file**; "edit" shares that one editor with "edit this range" (prev / page x of y / next when there is more than one page), and picking "whole file" warns you not to long-drag inside it — the "whole file in one big text area" path that deadlocks is never entered by default; the dialog title says "edit whole file · N lines (paged)" or "edit this range · lines X–Y". Line-level selection and "edit this range" arrived in 0.2.20, paged editing in 0.2.21, in-browser editing in 0.2.23. The editor dialog's size since 0.2.24 is yours too (**compact / standard (default) / large**: standard is `min(92vw, 880px)` wide with a `min(58vh, 560px)` editor, compact keeps the tree and right pane visible, large is 0.2.23's near-full-screen `min(94vw, 1200px)` / `min(76vh, 820px)`; the choice is remembered in `localStorage`)
-- **Right · Preview & checkup** — the “in-tree lint” results land here (right-click a row and lint switches to this tab), followed by the sandbox preview (opens in a new tab) and the lint issue list
-- **Right · Push status** — see at a glance what changed but has not been pushed; mark pushed, reset, set a display project name
-- **Right · Project scripts** — run a `source-*.js` from the workspace root (six ready-made shortcuts) with arguments, echoing exit code, command and output;
-  before running, the host locates the script and pre-checks the four keys (`SERVER_URL` / `USERNAME` / `PASSWORD` / `PROJECT_UUID`)
-  in **that script folder's** `.env` — if any is missing the tab only shows a “environment variables not configured” notice plus
-  an inline editor, and the execution confirmation never appears
-- **Right · Preset packages** — export/import `.dshpreset`
+目录和文件右侧的小标：
 
-Both pull and push go through a **command-preview confirmation**: the exact `node source-*.js …` command is
-shown first (pull carries an overwrite warning), and only then does it run. A successful pull clears the push
-ledger (the local files were just overwritten from the platform); a successful push marks that target as pushed.
+| 徽章 | 意思 |
+| --- | --- |
+| `✔ 已推送` | 内容和平台上的一致 |
+| `● 待推送` | 本地改过，还没同步到平台 |
+| `✗ 定位不到` | 这个目录既没有 `page.json` 的 `uuid`、也没有 `meta.json` 的 `id`，入不了账 |
+| `校验 ✗3` | 这一片有 3 个**错误**（警告不占徽章，去「校验」页签看） |
 
-Since 0.2.26 the **environment config** dialog reads and writes the `.env` that the `source-*.js` scripts
-**actually load**: the host's `projectResolveEnv` walks up from the project folder to the level holding
-`source-*.js` and that layer's four keys (`SERVER_URL` / `USERNAME` / `PASSWORD` / `PROJECT_UUID`) are edited
-(the two-key project-folder `.env` is the fallback when no script is found).
-A matching line is replaced in place (keeping its indent and `export ` prefix), otherwise the key is appended,
-while comments and every other line stay untouched; values containing whitespace or `#` are quoted. When the
-file does not exist yet, the dialog says that saving will create it. In the localdev layout the scripts sit in
-`localdev\` while the project folder is `localdev\<projectUuid>\`, so **two `.env` files coexist** (the project
-folder's belongs to the platform runtime). **Since 0.2.28 the dialog no longer compares the two** — there is only
-one entry point now, so contrasting that other file would only confuse; the dialog opens by saying that this is the
-file the scripts read, raises a ⚠ only when the `PROJECT_UUID` entered here is not the project the folder name
-points at (it is computed from the current input, so fixing the value clears the note), and offers a **use the
-project folder's ID** button — that mismatch was the source of “the config I get when running is not the one I
-configured in the panel”. The script pre-check in the **Project scripts** tab reads the same file.
+推送状态是**账本**：登记每个页面 / 接口在你上次推送时各文件的 mtime，之后 mtime 变了就算「改过」。所以：
 
-Since 0.2.27 **every reader of `.env` goes through that same file**: the host's `resolveEnvFile` decides which
-`.env` is “the environment config”, and both the `PROJECT_UUID` shown by the **Push status** tab and the
-`SERVER_URL` used to assemble the **Preview** sandbox come from it (each used to read its own layer's `.env`).
-So the project configured in the panel, the project shown by the scan and the project the scripts actually push
-to are one and the same; if the other `.env` still carries a different `PROJECT_UUID`, the status line adds a ⚠
-note naming that value instead of quietly mixing two projects.
+- 徽章回答的是「本地有没有平台上还没有的改动」；
+- 从服务器拉取之后，插件会**把这一片的账删掉**再重扫 —— 内容刚和服务器对齐，不该显示成待推送。
 
-Three entries share the same project browser: **Settings → Low-code project mode**, the **`▤` button at the
-bottom of the sidebar** (a floating copy), and a **“Low-code project” tab inside a session**
-(`slot: conversation.view`, `order: 20`). The session tab is controlled by the **project-mode switch**
-at the top of the panel: it is on by default, turning it off removes the tab from sessions
-immediately, while the settings and sidebar entries stay put. The state lives in `localStorage`
-under `dsh-magical-lowcode-project:project-mode` and syncs across panel instances and browser tabs.
+### 右键菜单
 
-A brand-new session that has **nothing in it yet** shows no tab — and that is upstream, not a lost
-registration: the conversation package passes `hideChrome: blank` to the session header and then requires
-`tabs.length > 1` before rendering the tab strip at all, while the view area returns `null` for a blank
-session. No plugin can put a tab there. Send one message (or just start chatting) and the tab appears; until
-then open the same panel from the sidebar **▤** button and use **reference into the composer**, which copies
-the `@path` to the clipboard from that context.
+在树里任意一行点右键：
 
-Switching entries or tabs **no longer throws the data away** (since 0.2.15): the tree, every expanded level and
-the push status live in a module-level cache, so a fresh mount shows the previous data at once and re-scans in the
-background; which levels are expanded, the last opened file and the right-pane tab are remembered in `localStorage`
-(`…:expanded` / `…:selected` / `…:detail`), and coming back lists the remembered folder and reopens that file.
+| 菜单项 | 作用 |
+| --- | --- |
+| 新建文件 / 新建文件夹 | 在当前位置新建（新建页面类目录会自动带模板） |
+| 引用 | 把该文件的 `@` 引用插进输入框 |
+| 推送前校验 | 对这一片跑静态校验，结果落到「校验」页签 |
+| 重命名 / 移动到… / 删除 | 常规文件操作（会同步改 `page.json` / `meta.json`） |
+| 推送这个页面 / 拉取这个页面 | 只跑这一个单元 |
+| 标记已推送 | 手工记账，不改文件 |
+| 刷新推送状态 | 只重扫，不重算账 |
+| 重置推送状态 | 把整个工作区的账本清掉，下次扫描全部重新登记 |
 
-UI labels follow the host language: the settings navigation name, the session tab, the sidebar
-button title, the five tab names and the switch row all ship zh/en dictionaries (via
-`locale.register` + `locale.bind` when the `locale` service is available, falling back to the
-built-in Chinese otherwise). Long explanatory copy inside the panel is still Chinese-only.
+> **推一个目录 = 连里面的子页面一起推。** 平台的 `source-page-push.js` 拿到目录 uuid 时走的是「推该目录及目录下的所有页面」。所以推完目录，插件会把整棵子树的账一起更新 —— 不会出现「父目录绿了、子页面还挂着待推送」。
 
+### 键盘
 
-## Install
+树里有键盘导航：上下移动、左右展开收起、回车打开。首屏如果一直「读取中」，点一下「刷新」。
 
-Search for `dsh-magical-lowcode-project` in DSH's **Settings → Plugin Market**, or install manually:
+---
 
-```bash
-dsh plugin --profile web add dsh-magical-lowcode-project
+## 四、源码
+
+树里点文件名，或者点行尾的 **源码** 按钮，就在「源码」页签里打开（多标签常驻）。用 CodeMirror 6，按扩展名选语言高亮。改完 **Ctrl+S**（或点保存）写回，写回后自动重扫这一片的校验与推送状态。
+
+---
+
+## 五、校验
+
+「校验」页签列出推送前静态校验的结果，按文件分组，点一条直接跳到源码页签的对应行。
+
+规则是踩过的坑固化的（V1.01 ~ V1.06 那一批）：`js-syntax`、`css-brace`、`attr-mustache`、`sys-zone-modified`、`uuid-missing`、`no-scene`、`bare-mustache`、`api-url`、`no-merge-loop`、`no-return`。
+
+分级：
+
+- **error** —— 会占树上的徽章（`✗N`），因为平台真的会因此出问题；
+- **warn** —— 只在页签里列，不占徽章。比如 `no-return`（接口脚本里 `return '成功'` 平台其实能吃），一个真实工程里能有一千多条，标出来只会让人学会忽略徽章。
+
+---
+
+## 六、脚本
+
+工作区根目录下那一层的 `source-*.js` 会被列成卡片，点「运行」就跑（用 DSH 自己的 node，不依赖系统 PATH）。
+
+内置认识的七个：
+
+| 脚本 | 说明 |
+| --- | --- |
+| `source-push.js` | 推送整个项目 |
+| `source-clone.js` | 克隆整个项目 |
+| `source-api-pull.js` / `source-api-push.js` | 拉取 / 推送全部接口 |
+| `source-page-pull.js` / `source-page-push.js` | 拉取 / 推送全部页面 |
+| `source-db-pull.js` | 拉取数据库 |
+
+不认识的 `source-*.js` 也会列出来（标「未登记」），一样能跑。
+
+### 外网地址一律二次确认
+
+`.env` 里的 `SERVER_URL` 只要不是本机，**推送和拉取都要先确认一次**：
+
+> 拉取看着「只是把东西取回来」，实际是拿服务器上的状态**覆盖本地文件**；`source-clone.js` 还会一路建目录。破坏性和推送一个级别。
+
+判据是**真实主机名**，不是某个「环境名」。面板里没有本地 / 线上的环境之分 —— 一条 `ENV=local` 配一个外网地址，脚本照样往外面推，按环境名判断只会更危险。
+
+跑起来之后下面是输出控制台，可以随时「停止」（Windows 上连子孙进程一起杀）。推送动辄几分钟，所以是「起进程 + 增量取输出」，不是干等。
+
+### 连接配置（页签顶部那一块）
+
+服务器地址 / 账号 / 密码**由面板维护**，不要求工作区里事先有 `.env`：
+
+| 按钮 | 作用 |
+| --- | --- |
+| 新建档案 | 存一个「服务器」（名称 / 地址 / 账号 / 密码） |
+| 铺脚手架 | 把插件自带的 `source-*.js` / `utils.js` / `package.json` 铺到当前目录 |
+| 写入 .env | 把选中的档案合并写进工作区的 `.env` |
+| 装依赖 | 装模板要用的 npm 包（只在缺的时候出现） |
+
+下面那行写着当前 `.env` 的现状（地址 / 账号 / 密码 / 项目）。`.env` 里的地址和选中档案对不上时，「写入 .env」会变红提醒。
+
+**项目清单**也能手动维护：选好服务器后点「＋ 项目」录一条（uuid + 名字），选中的那条可以「改名」「删除」。清单挂在**服务器档案**上，不挂文件树 —— 同一个服务器下的项目是同一批。另外 `.env` 注释里那批项目 uuid 会被自动捡出来当候选，两边在界面上合并显示。
+
+---
+
+## 七、空白目录从零开局
+
+新建一个空文件夹、注册成工作区，然后：
+
+1. **新建档案** —— 填服务器地址 / 账号 / 密码
+2. **铺脚手架** —— 把模板脚本铺进来（已存在的文件不会被改动）
+3. **写入 .env** —— 落盘；原来没有 `.env` 就新建一个
+4. **装依赖** —— 装 `axios` / `archiver` / `form-data` / `unzipper`
+
+之后脚本卡片就长出来了，选个项目点「克隆整个项目」即可。
+
+依赖只装一次，装在插件自己目录里，跑脚本时用 `NODE_PATH` 复用 —— 不必给每个新目录各来一次 `npm install`。目标目录自带 `node_modules` 时优先用它。
+
+---
+
+## 八、数据存在哪
+
+| 路径 | 内容 |
+| --- | --- |
+| `<DSH_HOME>/project-config.json` | 服务器档案（**含密码明文**）、每个工作区绑定的服务器与项目 |
+| `<DSH_HOME>/project-push-state.json` | 推送状态账本 |
+| `<DSH_HOME>/project-env-backups/` | 写 `.env` 前的备份，只留最近 10 份 |
+
+`DSH_HOME` 默认是 `~/.dsh`，可用环境变量覆盖。
+
+写 `.env` 有两条规矩：**注释行一行不动**（平台爱把备选项目、备选地址注释着堆在同一份文件里，那是用户唯一的人肉清单），**内容没变化就一个字节都不碰**（否则跑一次脚本留一份一模一样的备份，10 份上限很快被垃圾挤满）。
+
+面板的能力边界：所有带路径参数的 RPC 都要求路径落在**已注册的工作区**内，否则拒掉；跑脚本时只认工作区根目录下那一层的 `source-[a-z0-9-]+\.js`。
+
+---
+
+## 九、更新插件
+
+**从市场装的（`github:` 源）**：市场会比对「已安装的 commit」和「仓库 HEAD」，有新的就出现更新按钮，点一下重跑安装，**不用卸载重装**。
+
+**本地 `link:` 装的**：市场不会给更新入口（设计如此：`link:` 是开发工作区，永远不参与在线更新）。但你也不需要 —— 装的就是你正在改的那份源码，改完刷新页面（client）或重启 `dsh web`（host）即可。
+
+所以：想用「市场一键更新」，就用仓库地址装；想改代码即时生效，就用本地路径装。
+
+---
+
+## 十、常见问题
+
+**树上一片全变「待推送」了**
+账本记的是本地文件 mtime。删掉目录再从服务器拉回来，文件全是新写的、mtime 全新，旧记录自然条条对不上。现在拉取类脚本跑完会自动把对应分区的账清掉重扫；如果之前留下的脏状态还在，右键「重置推送状态」再刷新一次。
+
+**推了父目录，子页面还显示待推送**
+已经修了：推一个目录会把整棵子树的账一起更新。如果徽章还是旧的，右键「刷新推送状态」。
+
+**首屏一直「读取中」**
+点「刷新」。扫描有 mtime 快照缓存，第二次进同一目录会快很多。
+
+**目录上是 `✗ 定位不到`**
+这个目录里既没有 `page.json`（要 `uuid`）也没有 `meta.json`（要 `id`），账本认不出它是谁。多半是新建了目录还没建页面。
+
+**`.env` 里的 `ENV` 是什么**
+只决定脚本打印什么文案，不决定请求打到哪里。面板里没有这一项，恒写 `local`；真正连哪个地址看 `SERVER_URL`。
+
+---
+
+## 十一、开发
+
+```
+dsh-project-panel/
+  package.json          依赖只有给脚手架用的那 4 个（axios / archiver / form-data / unzipper）
+  cordis.patch.yml      insert: dsh-project-panel
+  lib/index.js          host 半边：desktopProject/* RPC（26 个）
+  lib/client.js         client 半边：手写 ESM，改了刷新即生效
+  lib/client.editor.js  ⚠ 构建产物（CodeMirror 6）—— 不要手改
+  src/editor.js         编辑器分片的源码，npm run build:editor 生成上面那个
+  scaffold/             自带的工程脚本模板（source-*.js + utils.js + package.json）
+  NOTES.md              开发笔记：每个设计决定和踩过的坑
 ```
 
-## Compatibility
-
-- Host: `engines.dsh = ">=0.2.0-0"` (developed and verified against `@deepseek-ai/dsh-*` `0.2.0-rc.2`)
-- Node.js: `^22.19.0 || >=24.0.0`
-- Platforms: Windows / macOS / Linux
-
-The `0.2.0` floor is deliberate: 0.2.0 changed the agent-preset model (presets are profile-patch declarations served by `@deepseek-ai/dsh-agent-preset-registry`; the old `@deepseek-ai/dsh-agent-presets` package, with its on-disk preset roots, is gone), and this release targets that model. The plugin market reads `engines.dsh` before installing and refuses an out-of-range host instead of installing a broken plugin.
-
-Core packages (`@deepseek-ai/dsh-agent-preset-registry`, `@deepseek-ai/dsh-typert-protocol`) are declared as `peerDependencies`, so the plugin reuses the host's copy instead of installing a second instance.
-
-## Permissions and safety boundaries
-
-- File access is **limited to registered workspaces**; paths are normalized before the prefix comparison and anything outside is refused
-- Script execution is whitelisted to `source-*.js`, resolved by walking **up from the given directory to the workspace root** (keep the scripts at the workspace root or in a project subdirectory), run with the host's own node (`shell: false`); stdout is aborted past 400 000 characters and output is truncated to 20 000
-- Push state is written to `$DSH_HOME/project-push-state.json` (read migrates from the legacy path once)
-- **The host half makes no outbound network requests**; the HTTP endpoints ride DSH's own authenticated connection channel
-- ⚠️ **The preview page does reach out**: the HTML assembled by `projectAssemblePreview` contains
-  `<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>`, so opening that
-  preview in a browser requests jsdelivr. This is inherited verbatim from upstream DSH Desktop and is disclosed here.
-
-## Development
-
-There is no build step: both halves are authored artifacts, so edit `lib/index.js` / `lib/client.js` directly.
-
 ```bash
-# npm test chains three checks (zero dependencies; CI and prepublishOnly run the same command)
-npm test
-#  1) test/verify.mjs            static self-check: manifest / compatibility literals / both halves'
-#                                export contracts / slot registration discipline / specifier allow-list /
-#                                12-RPC declare-define-reach consistency / locales
-#  2) test/client-stub-check.mjs client logic stub check: really EXECUTES the bundle's factory and
-#                                apply() with a stub require + stub ctx, asserting every RPC goes
-#                                through the same-origin fetch envelope (POST /api/desktopProject/<method>,
-#                                12 methods cross-checked verbatim and in order against the host)
-#                                and both slot registrations
-#  3) test/render-check.mjs      client render stub check: really RENDERS both slot components with
-#                                a stub React, flipping each of the five tabs, asserting tab label
-#                                order and the sidebar entry structure
+npm run build:editor     # 重新打包编辑器分片
+npm run watch:editor     # 边改边打
 ```
 
-The two stub checks close a gap: `verify.mjs` only reads bytes, while the stub checks need neither a
-browser nor a network. The logic layer also covers `apply`'s degradation branches (does it exit cleanly
-when `slots` is missing), and the render layer proves all five tabs actually paint.
+`link:` 安装不装传递依赖，所以**两个半边都不许 import 第三方包，也不许 import `@deepseek-ai/*`**（Node 从插件真实路径向上解析，够不到 `profile/node_modules`）。顶层 import 失败会打挂整个 profile。
 
-What they cannot cover is the real loader and real clicks: the client half once failed to load in a
-real browser with `descriptor.parameters is not iterable` while all three stub checks stayed green.
-Only the browser check below catches that class of bug, so it is not optional.
+设计取舍、性能数字、验证手法都记在 [NOTES.md](./NOTES.md)。
 
-`prepublishOnly` runs the same three steps, so a publish cannot skip them.
-
-Check the installed copy (does it still import once inside a profile?):
-
-```bash
-node test/installed-check.mjs <profile>/node_modules/dsh-magical-lowcode-project
-node test/installed-check.mjs --from-profile <profileDir>
-```
-
-Browser check for the client half (the only check that proves `apply()` really ran in a browser):
-
-```bash
-node test/browser-check.mjs "http://127.0.0.1:<port>/?token=<token>"
-```
-
-It drives a headless Chromium against a live UI, opens the sidebar entry, flips through all five tabs,
-and asserts that `__DSH_BOOT__` carries this plugin's boot row, that the sidebar shows the button this
-plugin registers (`title="低代码工程模式"`), that all five tabs are present and clickable, that clicking
-「重置记录」 produces a real RPC to `/api/desktopProject/projectResetPushState` returning `ok=true`,
-and that no runtime error mentions the plugin.
-⚠️ It needs an environment that can launch Chromium; in a sandbox that refuses to start a
-browser it stops at "cannot reach the debugging port".
-
-One-off real-install verification:
-
-```bash
-# use an isolated DSH_HOME so your own live profile is untouched
-npm pack
-DSH_HOME=<scratch> dsh plugin --profile verify add "$PWD/dsh-magical-lowcode-project-<version>.tgz"
-DSH_HOME=<scratch> dsh --profile verify --dump-config | tail -n 3     # the plugin's layer should appear
-node test/installed-check.mjs --from-profile <scratch>/profiles/verify
-```
-
-> **Do not use `dsh plugin add <directory>` for development.** It goes through pnpm's `link:`, which does
-> **not** install transitive dependencies, so `fflate` is missing and the top-level `import "fflate"` in
-> `lib/index.js` throws `ERR_MODULE_NOT_FOUND` — and a module-level import failure in a plugin **takes down
-> the whole profile**. Install the tarball produced by `npm pack`, or run `npm install` inside the plugin
-> directory first.
+---
 
 ## License
 
-MIT. This package is a derivative work of `plugins/dsh-desktop-project` in **DSH Desktop** ([dataelement/dsh-desktop](https://github.com/dataelement/dsh-desktop), MIT, Copyright (c) 2026 DataElement): the project-mode RPCs and `.dshpreset` endpoints of the host half carry over under that MIT license, while the client half is an entirely new implementation. See `LICENSE`.
+MIT

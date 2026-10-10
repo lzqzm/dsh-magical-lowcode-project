@@ -1,12 +1,16 @@
-# npm pack 产物
-*.tgz
+# 插件本体要发布的东西都在 lib/ 、scaffold/ 、src/ 和根下那几个文件里，
+# 这里只挡「装了依赖」和「跑出来的临时物」。
 
-# 开发用依赖（peer 依赖的 junction 与本地补装的依赖，一律不入库）
+# 依赖装到插件根，是为了给铺出去的工作区脚本做 NODE_PATH 复用（见 NOTES
+# 「空目录也能拉项目」一节）—— 但它本身不该进仓库。
 node_modules/
 
-# 编辑器 / 系统
+# 凭据（正常情况下插件目录里不该出现，留着是防手滑）
+.env
+.env.*
+!.env.example
+
+# 杂项
+*.log
 .DS_Store
 Thumbs.db
-.idea/
-.vscode/
-*.log

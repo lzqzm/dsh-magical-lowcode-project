@@ -26,7 +26,7 @@ MagicalCoder 风格的工程是一套约定目录：页面由 `page.json` + `ind
 命令行装：
 
 ```bash
-dsh plugin --profile web add github:lzqzm/dsh-magical-lowcode-project
+dsh plugin --profile web add github:lzqzm/dsh-project-panel
 ```
 
 本地开发（`link:` 安装，装的是你正在改的那份源码）：

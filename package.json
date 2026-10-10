@@ -63,7 +63,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lzqzm/dsh-magical-lowcode-project.git"
+    "url": "git+https://github.com/lzqzm/dsh-project-panel.git"
   },
   "engines": {
     "node": "^22.19.0 || >=24.0.0",

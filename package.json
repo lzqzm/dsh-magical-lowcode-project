@@ -1,6 +1,6 @@
 {
   "name": "dsh-project-panel",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "DSH 工程面板：把低代码工程目录树搬进 web 端 —— 左栏常驻图标 + 中栏工程浏览器（多级文件树 / 推送状态 / 文件内容）。",
   "type": "module",
   "main": "lib/index.js",

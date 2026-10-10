@@ -1446,8 +1446,8 @@ const parsed = await readProjectEnv(root);
   `source-*.js` 与 `SCAFFOLD_FILES`，**已存在的一律不动**，进 `skipped` —— 用户
   手改过的脚本不能被模板覆盖掉。
 - 依赖**不往每个新目录里各装一遍**：插件的 `package.json` 里声明
-  `axios / archiver / form-data / unzipper`，装一份（`<插件根>/node_modules`），
-  跑脚本时由 host 给子进程塞 `NODE_PATH`：
+  `axios / archiver / form-data / unzipper`，装一份，跑脚本时由 host 给子进程塞
+  `NODE_PATH`：
 
   ```js
   const spawnEnv = Object.assign({}, process.env);
@@ -1455,6 +1455,31 @@ const parsed = await readProjectEnv(root);
       spawnEnv.NODE_PATH = modules;   /* 目标目录自带 node_modules 时那边优先 */
   }
   ```
+
+- **「装一份」是哪一份，要看装法**（2026-10 踩到）。`link:` 装法下就是
+  `<插件根>/node_modules`（开发目录里 `npm install` 出来的那份）。但改成从仓库装
+  （`github:lzqzm/dsh-project-panel`）之后，pnpm 把依赖提到了 **profile 的**
+  `node_modules`，插件目录里一个都没有 —— 旧的 `scaffoldModules()` 只 stat 了
+  `<插件根>/node_modules`，于是恒回空串：客户端显示「装依赖」，点下去会在
+  `profiles/web/node_modules/dsh-project-panel/` 里 `npm install`（污染 profile，
+  下次市场更新还会被清掉）。
+  现在按四个包**齐不齐**判断，找不到就往上走四层找就近的那份：
+
+  ```js
+  if (await hasScaffoldDeps(SCAFFOLD_MODULES)) return SCAFFOLD_MODULES;
+  let dir = PANEL_ROOT;
+  for (let depth = 0; depth < 4; depth += 1) {
+      const parent = dirname(dir); if (parent === dir) break;
+      dir = parent;
+      const candidate = join(dir, "node_modules");
+      if (await hasScaffoldDeps(candidate)) return candidate;
+  }
+  return "";
+  ```
+
+  实测（装好的 profile）：`scaffoldModules()` →
+  `C:\Users\18013\.dsh\profiles\web\node_modules`，`NODE_PATH` 指过去四个包全部
+  `require` 得到。
 
 - `npm install` 不能用 `shell: true` 的 `.cmd`：node 20.12+ 在 Windows 上禁掉了
   `shell: false` 跑 `.cmd`（CVE-2024-27980）。所以 `npmCli()` 自己找
